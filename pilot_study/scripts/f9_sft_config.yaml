@@ -1,0 +1,43 @@
+### F8: Fun-Audio-Chat 8B 话轮状态 SFT (LoRA, 单卡 24GB)
+### model
+model_name_or_path: /share/workspace3/shared_models/Fun-Audio-Chat-8B
+
+### method
+stage: sft
+do_train: true
+do_eval: false
+finetuning_type: lora
+lora_rank: 16
+lora_alpha: 32
+lora_target: all
+flash_attn: auto
+print_param_status: false
+
+### dataset
+dataset: f9-synthetic
+template: funaudiochat
+cutoff_len: 2048
+overwrite_cache: true
+preprocessing_num_workers: 8
+neat_packing: false
+
+### output
+output_dir: /share/workspace3/zhuangruicen/proj-thumpy/pilot_study/real_data/results/annotator/f9_sft_synthetic/saves
+logging_steps: 5
+save_strategy: steps
+save_steps: 500
+plot_loss: false
+overwrite_output_dir: true
+
+### train
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4
+learning_rate: 2.0e-4
+num_train_epochs: 2.0
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs: {min_lr_rate: 0.1}
+warmup_ratio: 0.03
+bf16: true
+report_to: none
+ddp_timeout: 180000000
+gradient_checkpointing: true

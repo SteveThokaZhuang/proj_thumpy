@@ -1,0 +1,736 @@
+<title>F3 人工验证：一个标签的分解</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  /* ── tokens: light is the base, defined here and nowhere else ───────── */
+  :root {
+    --ground:   #F1F3F1;
+    --surface:  #FFFFFF;
+    --sunken:   #E7EBE7;
+    --ink:      #16191B;
+    --ink-2:    #39424A;
+    --muted:    #5B6469;
+    --rule:     #D3D9D5;
+    --rule-2:   #E4E8E4;
+
+    --bc:       #0E6B64;
+    --bcmid:    #3E8C74;
+    --turn:     #A2741B;
+    --intr:     #9C2A55;
+    --noise:    #7C838A;
+    --mixed:    #6A5B94;
+
+    --bc-wash:    #E2EFEC;
+    --turn-wash:  #F4EBD8;
+    --intr-wash:  #F7E4EB;
+
+    --seg-ink:  #FFFFFF;
+    --shadow: 0 1px 2px rgba(22,25,27,.05), 0 8px 24px -16px rgba(22,25,27,.28);
+
+    --measure: 68ch;
+    --step--1: .8125rem;
+    --step-0:  1.0625rem;
+    --step-1:  1.25rem;
+    --step-2:  1.5rem;
+    --step-3:  2rem;
+    --step-4:  clamp(2.25rem, 5vw, 3.25rem);
+  }
+
+  /* dark — only tokens are redefined, never components */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #0F1314;
+      --surface: #171C1E;
+      --sunken:  #1F2629;
+      --ink:     #ECEFED;
+      --ink-2:   #C2CAC7;
+      --muted:   #8D9699;
+      --rule:    #2A3234;
+      --rule-2:  #232A2C;
+
+      --bc:      #4FB3A6;
+      --bcmid:   #6CB894;
+      --turn:    #D2A344;
+      --intr:    #D9638C;
+      --noise:   #8B939A;
+      --mixed:   #A292CC;
+
+      --bc-wash:   #12302E;
+      --turn-wash: #332915;
+      --intr-wash: #341923;
+      --seg-ink:  #0F1314;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:  #0F1314;
+    --surface: #171C1E;
+    --sunken:  #1F2629;
+    --ink:     #ECEFED;
+    --ink-2:   #C2CAC7;
+    --muted:   #8D9699;
+    --rule:    #2A3234;
+    --rule-2:  #232A2C;
+
+    --bc:      #4FB3A6;
+    --bcmid:   #6CB894;
+    --turn:    #D2A344;
+    --intr:    #D9638C;
+    --noise:   #8B939A;
+    --mixed:   #A292CC;
+
+    --bc-wash:   #12302E;
+    --turn-wash: #332915;
+    --intr-wash: #341923;
+    --seg-ink:  #0F1314;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  /* ── base ───────────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 2.5rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.75rem, 6vw, 4.5rem);
+  }
+
+  .prose { max-width: var(--measure); }
+
+  h1, h2, h3, .eyebrow, .lede, .mono, th, .readout-n, .tab, .legend-label {
+    font-family: Archivo, "Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  }
+
+  h1 {
+    font-size: var(--step-4);
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -.022em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h2 {
+    font-size: var(--step-2);
+    font-weight: 600;
+    line-height: 1.22;
+    letter-spacing: -.012em;
+    text-wrap: balance;
+    margin: 0 0 .75rem;
+  }
+
+  h3 {
+    font-size: var(--step-1);
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 0 0 .5rem;
+  }
+
+  p { margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+
+  .eyebrow {
+    font-size: var(--step--1);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .13em;
+    color: var(--muted);
+  }
+
+  .mono, code {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  code {
+    font-size: .87em;
+    background: var(--sunken);
+    border-radius: 2px;
+    padding: .1em .34em;
+  }
+
+  strong { font-weight: 600; color: var(--ink); }
+
+  .k-bc   { color: var(--bc);    font-weight: 600; }
+  .k-intr { color: var(--intr);  font-weight: 600; }
+  .k-turn { color: var(--turn);  font-weight: 600; }
+  .k-mid  { color: var(--bcmid); font-weight: 600; }
+
+  a { color: var(--bc); }
+  :focus-visible { outline: 2.5px solid var(--bc); outline-offset: 2px; border-radius: 2px; }
+
+  /* ── masthead ───────────────────────────────────────────────────────── */
+  header.mast { display: flex; flex-direction: column; gap: 1.15rem; }
+
+  .lede {
+    font-size: var(--step-1);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 46ch;
+    font-weight: 500;
+    margin: 0;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem 1.6rem;
+    padding-top: 1.15rem;
+    border-top: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-size: var(--step--1);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  /* ── limits panel ───────────────────────────────────────────────────── */
+  .limits {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--turn);
+    border-radius: 3px;
+    padding: 1.4rem 1.6rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+  }
+  .limits .eyebrow { color: var(--turn); }
+  .limits ol {
+    margin: 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: .7rem;
+    counter-reset: lim;
+  }
+  .limits li {
+    counter-increment: lim;
+    display: grid;
+    grid-template-columns: 1.6rem 1fr;
+    gap: .5rem;
+    font-size: .9375rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+  .limits li::before {
+    content: counter(lim);
+    font-family: "JetBrains Mono", monospace;
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--turn);
+    padding-top: .22em;
+  }
+
+  /* ── section scaffolding ────────────────────────────────────────────── */
+  section { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .sec-head { display: flex; flex-direction: column; gap: .3rem; }
+
+  /* ── Q readouts ─────────────────────────────────────────────────────── */
+  .qs { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+
+  .q {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.35rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    box-shadow: var(--shadow);
+  }
+  .q-tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: .6875rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: var(--muted);
+  }
+  .q-ask { font-size: .9375rem; color: var(--ink-2); line-height: 1.45; margin: 0; }
+  .readout { display: flex; align-items: baseline; gap: .55rem; margin-top: .15rem; }
+  .readout-n {
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .readout-d { font-family: "JetBrains Mono", monospace; font-size: .8125rem; color: var(--muted); }
+
+  /* ── decomposition bars (the signature device) ──────────────────────── */
+  .decomp { display: flex; flex-direction: column; gap: .5rem; }
+  .decomp + .decomp { margin-top: 1.9rem; }
+
+  .decomp-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem 1rem;
+    font-family: "JetBrains Mono", monospace; font-size: .8125rem;
+  }
+  .decomp-claim { font-weight: 700; color: var(--ink); }
+  .decomp-n { color: var(--muted); }
+
+  .bar {
+    display: flex;
+    height: 2.5rem;
+    border-radius: 2px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    background: var(--sunken);
+  }
+  .seg {
+    display: flex; align-items: center; justify-content: center;
+    font-family: "JetBrains Mono", monospace;
+    font-size: .75rem; font-weight: 700;
+    color: var(--seg-ink);
+    min-width: 0;
+    transition: filter .15s ease;
+  }
+  .seg:hover { filter: brightness(1.12); }
+  .seg span { padding: 0 .3rem; overflow: hidden; white-space: nowrap; }
+  .seg.s-bc    { background: var(--bc); }
+  .seg.s-bcmid { background: var(--bcmid); }
+  .seg.s-mixed { background: var(--mixed); }
+  .seg.s-turn  { background: var(--turn); }
+  .seg.s-intr  { background: var(--intr); }
+  .seg.s-noise { background: var(--noise); }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: .45rem 1.1rem;
+    margin-top: 1.5rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  .legend-item { display: flex; align-items: center; gap: .42rem; font-family: "JetBrains Mono", monospace; font-size: .75rem; color: var(--ink-2); }
+  .swatch { width: .7rem; height: .7rem; border-radius: 1.5px; flex: none; }
+
+  /* ── spectrum rail ──────────────────────────────────────────────────── */
+  .rail {
+    display: flex; height: 1.6rem; border-radius: 2px; overflow: hidden;
+    border: 1px solid var(--rule);
+  }
+  .rail .seg { font-size: 0; }
+  .rail-axis {
+    display: flex; justify-content: space-between;
+    font-family: "JetBrains Mono", monospace; font-size: .6875rem;
+    color: var(--muted); margin-top: .5rem; letter-spacing: .04em;
+  }
+
+  /* ── tables ─────────────────────────────────────────────────────────── */
+  .tw { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+  th, td { padding: .6rem .8rem; text-align: right; white-space: nowrap; }
+  th {
+    font-size: .6875rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+  }
+  td.mono, th.mono { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr + tr td { border-top: 1px solid var(--rule-2); }
+  tbody tr.hi td { background: var(--intr-wash); font-weight: 600; }
+  td .pip { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .45rem; vertical-align: middle; }
+
+  /* ── mechanism cards ────────────────────────────────────────────────── */
+  .mechs { display: flex; flex-direction: column; gap: 1.1rem; }
+
+  .mech {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1.5rem 1.6rem;
+    display: flex; flex-direction: column; gap: .9rem;
+    box-shadow: var(--shadow);
+  }
+  .mech > h3 { margin-bottom: 0; }
+
+  blockquote {
+    margin: 0;
+    padding: .85rem 0 .85rem 1.1rem;
+    border-left: 2px solid var(--bc);
+    color: var(--ink-2);
+    font-size: .9375rem;
+    line-height: 1.6;
+  }
+  blockquote cite {
+    display: block; margin-top: .5rem;
+    font-family: "JetBrains Mono", monospace; font-style: normal;
+    font-size: .75rem; color: var(--muted);
+  }
+
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; }
+  .pair > div { border: 1px solid var(--rule); border-radius: 3px; padding: .9rem 1rem; background: var(--sunken); }
+  .pair .tag { font-family: "JetBrains Mono", monospace; font-size: .72rem; font-weight: 700; margin-bottom: .35rem; display: block; }
+
+  /* ── steps ──────────────────────────────────────────────────────────── */
+  .steps { display: flex; flex-direction: column; gap: .8rem; counter-reset: st; }
+  .step {
+    display: grid; grid-template-columns: 2rem 1fr; gap: .9rem;
+    padding: .95rem 0; border-top: 1px solid var(--rule);
+  }
+  .step::before {
+    counter-increment: st; content: counter(st, decimal-leading-zero);
+    font-family: "JetBrains Mono", monospace; font-size: .8125rem; font-weight: 700;
+    color: var(--bc); padding-top: .1em;
+  }
+  .step p { margin: 0; font-size: .9375rem; color: var(--ink-2); }
+  .step b { color: var(--ink); }
+
+  /* ── callout ────────────────────────────────────────────────────────── */
+  .callout {
+    background: var(--bc-wash);
+    border-left: 3px solid var(--bc);
+    border-radius: 2px;
+    padding: 1rem 1.25rem;
+    font-size: .9375rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+  .callout.warn { background: var(--intr-wash); border-left-color: var(--intr); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    font-family: "JetBrains Mono", monospace;
+    font-size: .75rem;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Pilot Study · F3 · 人工验证</div>
+    <h1>管线说 Backchannel 的 27 条里，有 8 条其实是打断</h1>
+    <p class="lede">一百条人耳复核，加上你对 BC 与 interruption 是"有程度而非二元"的判断 —— 数据站在你这边。</p>
+    <div class="meta">
+      <span><b>日期</b> 2026-09-15</span>
+      <span><b>数据</b> judgments2.csv · 100 条</span>
+      <span><b>分级编码</b> 47 条有 note</span>
+      <span><b>分析</b> ari_f3_analyze.py</span>
+    </div>
+  </header>
+
+  <div class="limits">
+    <div class="eyebrow">读之前的三条限制</div>
+    <ol>
+      <li>分级编码是<b>我读你的 note 得出的</b>，不是你逐条勾选的。每条原文都留在 <code>f3_analysis.json</code> 里，可以逐条推翻我。</li>
+      <li>只有 <b>47/100</b> 条有 note，而且不是随机子集 —— 有 note 的里面"真重叠"占 59.6%，没 note 的只占 41.5%。<b>比例不能外推到全部 100 条。</b></li>
+      <li>单人标注，没有标注者间一致性。</li>
+    </ol>
+  </div>
+
+  <!-- ── 1 ─────────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">第一部分</div>
+      <h2>原定要验证的两件事</h2>
+      <p class="prose" style="color:var(--muted)">指南把两个问题分开问，所以分开答。</p>
+    </div>
+
+    <div class="qs">
+      <div class="q">
+        <div class="q-tag">Q1 · 听得到吗</div>
+        <p class="q-ask">标注器给的 BC 窗口里，人耳能听到一个 0.2–2 s 的短 BC token 吗？</p>
+        <div class="readout">
+          <span class="readout-n k-bc">77</span>
+          <span class="readout-d">/ 100 听到了</span>
+        </div>
+        <p style="font-size:.875rem;color:var(--muted);margin:0">23 条没听到 —— 原因见第三部分。</p>
+      </div>
+
+      <div class="q">
+        <div class="q-tag">Q2 · 标签对吗</div>
+        <p class="q-ask">声学 <code>realized</code> 标签（真重叠 / 停顿内）与人耳一致吗？</p>
+        <div class="readout">
+          <span class="readout-n k-bc">71</span>
+          <span class="readout-d">/ 100 一致</span>
+        </div>
+        <p style="font-size:.875rem;color:var(--muted);margin:0">但这个总数把两个完全不对称的方向平均掉了 ↓</p>
+      </div>
+    </div>
+
+    <div class="tw">
+      <table>
+        <caption class="eyebrow" style="text-align:left;padding:.9rem .8rem .2rem;color:var(--muted)">Q2 拆开看 —— 误差全在一边</caption>
+        <thead>
+          <tr>
+            <th>realized 说</th>
+            <th>人工同意</th>
+            <th>一致率</th>
+            <th style="text-align:left">读数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="pip" style="background:var(--bc)"></span>Backchannel（真重叠）</td>
+            <td class="mono">42 / 49</td>
+            <td class="mono k-bc">85.7%</td>
+            <td style="text-align:left;font-weight:400;color:var(--muted);white-space:normal">这一边基本可信</td>
+          </tr>
+          <tr class="hi">
+            <td><span class="pip" style="background:var(--noise)"></span>None（停顿内）</td>
+            <td class="mono">28 / 50</td>
+            <td class="mono k-intr">56.0%</td>
+            <td style="text-align:left;font-weight:400;color:var(--intr);white-space:normal">50 条里 22 条人耳听到了重叠</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <strong>主要误差是假阴性。</strong>管线把"没有声学重叠"直接当成"不是真 BC"，但人耳在那 22 条里听到了重叠 —— 44% 的漏检率落在"停顿内"这一边。
+    </div>
+  </section>
+
+  <!-- ── 2 ─────────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">第二部分</div>
+      <h2>你说的"不是二元"，数据长这样</h2>
+      <p class="prose">把 47 条 note 编码成你描述的那套分级。下面的条带就是<b>同一个二元标签内部真实的构成</b>。</p>
+    </div>
+
+    <div class="decomp">
+      <div class="decomp-head">
+        <span class="decomp-claim">realized = Backchannel</span>
+        <span class="decomp-n">27 条有 note</span>
+      </div>
+      <div class="bar" role="img" aria-label="Backchannel 的 27 条中，打断 8 条、纯 BC 7 条、并存 7 条、话轮转换 3 条、BC-mid 1 条、录音问题 1 条">
+        <div class="seg s-intr"  style="flex:8 1 0"><span>打断 8</span></div>
+        <div class="seg s-bc"    style="flex:7 1 0"><span>纯BC 7</span></div>
+        <div class="seg s-mixed" style="flex:7 1 0"><span>并存 7</span></div>
+        <div class="seg s-turn"  style="flex:3 1 0"><span>3</span></div>
+        <div class="seg s-bcmid" style="flex:1 1 0"><span></span></div>
+        <div class="seg s-noise" style="flex:1 1 0"><span></span></div>
+      </div>
+      <p style="font-size:.9rem;color:var(--intr);margin:.35rem 0 0" class="prose">
+        这个标签里 <strong>29.6% 是打断</strong>，真正算 BC 的只有 <strong>25.9%</strong>。
+      </p>
+    </div>
+
+    <div class="decomp">
+      <div class="decomp-head">
+        <span class="decomp-claim">realized = None（停顿内）</span>
+        <span class="decomp-n">19 条有 note</span>
+      </div>
+      <div class="bar" role="img" aria-label="None 的 19 条中，话轮转换 10 条、打断 5 条、纯 BC 2 条、BC-mid 1 条、录音问题 1 条">
+        <div class="seg s-turn"  style="flex:10 1 0"><span>话轮转换 10</span></div>
+        <div class="seg s-intr"  style="flex:5 1 0"><span>打断 5</span></div>
+        <div class="seg s-bc"    style="flex:2 1 0"><span>2</span></div>
+        <div class="seg s-bcmid" style="flex:1 1 0"><span></span></div>
+        <div class="seg s-noise" style="flex:1 1 0"><span></span></div>
+      </div>
+      <p style="font-size:.9rem;color:var(--muted);margin:.35rem 0 0" class="prose">
+        "停顿内"里一半以上是<b>正常话轮转换</b> —— 有 BC 词，但根本不是 BC。
+      </p>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="swatch" style="background:var(--bc)"></span>纯 BC（不干扰说话人）</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--bcmid)"></span>BC-mid（明确介于两者之间）</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--mixed)"></span>同一条里两者并存</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--turn)"></span>单纯话轮转换</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--intr)"></span>Interruption</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--noise)"></span>录音 / 音频问题</div>
+    </div>
+  </section>
+
+  <!-- ── taxonomy rail ─────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">47 条 note 的整体分布</div>
+      <h2>只有 19% 是干净的 BC</h2>
+    </div>
+
+    <div>
+      <div class="rail" role="img" aria-label="47 条中：打断 13、话轮转换 13、纯 BC 9、并存 7、BC-mid 3、录音问题 2">
+        <div class="seg s-intr"  style="flex:13 1 0"></div>
+        <div class="seg s-turn"  style="flex:13 1 0"></div>
+        <div class="seg s-bc"    style="flex:9 1 0"></div>
+        <div class="seg s-mixed" style="flex:7 1 0"></div>
+        <div class="seg s-bcmid" style="flex:3 1 0"></div>
+        <div class="seg s-noise" style="flex:2 1 0"></div>
+      </div>
+      <div class="rail-axis">
+        <span>← 越靠左越"不干扰说话人"</span>
+        <span>越靠右越"接管话轮" →</span>
+      </div>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>分级</th><th>条数</th><th>占比</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="pip" style="background:var(--intr)"></span>Interruption</td><td class="mono">13</td><td class="mono">27.7%</td></tr>
+          <tr><td><span class="pip" style="background:var(--turn)"></span>单纯话轮转换</td><td class="mono">13</td><td class="mono">27.7%</td></tr>
+          <tr><td><span class="pip" style="background:var(--bc)"></span>纯 BC</td><td class="mono">9</td><td class="mono">19.1%</td></tr>
+          <tr><td><span class="pip" style="background:var(--mixed)"></span>同一条里并存</td><td class="mono">7</td><td class="mono">14.9%</td></tr>
+          <tr><td><span class="pip" style="background:var(--bcmid)"></span>BC-mid</td><td class="mono">3</td><td class="mono">6.4%</td></tr>
+          <tr><td><span class="pip" style="background:var(--noise)"></span>录音 / 音频问题</td><td class="mono">2</td><td class="mono">4.3%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <strong>"带 BC 词"这件事，一半以上不对应 BC 功能</strong> —— 27.7% 是话轮转换，27.7% 是打断。你说的那个中间态 <span class="k-mid">BC-mid</span> 确实存在（3 条），但样本量还小，<b>存在性成立、规模未知</b>。
+    </div>
+  </section>
+
+  <!-- ── 3 ─────────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">第三部分</div>
+      <h2>你 note 里最硬的三个机制</h2>
+    </div>
+
+    <div class="mechs">
+
+      <div class="mech">
+        <h3>同一个词横跨全部功能</h3>
+        <p style="margin:0;font-size:.9375rem;color:var(--ink-2)">没有一个 token 能决定功能。光看词表，这四类样本长得一模一样：</p>
+        <div class="tw" style="border:none;background:none">
+          <table>
+            <thead><tr><th>词</th><th style="text-align:left">跨几种功能</th><th style="text-align:left">出处</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="mono" style="font-weight:700">yeah</td>
+                <td style="text-align:left;white-space:normal"><span class="k-intr">5 种</span>（6 类里除了"录音问题"全占）</td>
+                <td class="mono" style="text-align:left;white-space:normal;font-size:.78rem;color:var(--muted)">纯BC 052/053 · BC-mid 049 · 打断 047/058/059 · 并存 062/063 · 转换 045/067</td>
+              </tr>
+              <tr>
+                <td class="mono" style="font-weight:700">ok</td>
+                <td style="text-align:left;white-space:normal"><span class="k-turn">4 种</span></td>
+                <td class="mono" style="text-align:left;white-space:normal;font-size:.78rem;color:var(--muted)">纯BC 044 · BC-mid 077 · 打断 064 · 转换 043</td>
+              </tr>
+              <tr>
+                <td class="mono" style="font-weight:700">wow</td>
+                <td style="text-align:left;white-space:normal"><span class="k-bc">2 种</span></td>
+                <td class="mono" style="text-align:left;white-space:normal;font-size:.78rem;color:var(--muted)">转换 041 · 纯BC 070</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin:.5rem 0 .2rem;font-size:.9375rem;color:var(--ink-2)"><strong>最强的一对</strong> —— 两条都是"很长的 yeah"：</p>
+        <div class="pair">
+          <div>
+            <span class="tag k-bc">clip_052 · 纯 BC</span>
+            <span style="font-size:.9rem;color:var(--ink-2)">「表示惊叹的 yeah，语调也很长，但是并不意味着暗示接管话轮，而是单纯表达惊叹」</span>
+          </div>
+          <div>
+            <span class="tag k-mid">clip_049 · BC-mid</span>
+            <span style="font-size:.9rem;color:var(--ink-2)">「说了个声音很长的 yeah 来做 backchannel……较强的语气也暗示说话人0交换话论给她」</span>
+          </div>
+        </div>
+        <p style="margin:0;font-size:.9375rem;color:var(--ink-2)">声学形式几乎不可分，功能相反。<strong>靠 token + 时长/音高做特征，分不开这两类。</strong></p>
+      </div>
+
+      <div class="mech">
+        <h3>意图 ≠ 效果</h3>
+        <blockquote>
+          说话人0的 yeah 和 i know <strong>抢话轮本意是 interruption</strong>，但是<strong>被说话人1忽略了</strong>，本质上也属于 bc
+          <cite>clip_066 · 唯一被标了"意图"标志的一条</cite>
+        </blockquote>
+        <p style="margin:0;font-size:.9375rem;color:var(--ink-2)">同一个行为，意图是打断、效果是附和。那么"是不是 interruption"该按<strong>说话人的意图</strong>标，还是按<strong>听话人是否让出话轮</strong>标？现有标签体系没回答这个问题，而是默认二者一致。</p>
+      </div>
+
+      <div class="mech">
+        <h3>"没重叠"推不出"不是 BC"</h3>
+        <p style="margin:0;font-size:.9375rem;color:var(--ink-2)">6 条 note 明确提到没有声学重叠，但它们<strong>并不都是 BC</strong>：</p>
+        <div class="bar" style="height:2.1rem">
+          <div class="seg s-bc"   style="flex:2 1 0"><span>仍是 BC · 2</span></div>
+          <div class="seg s-turn" style="flex:3 1 0"><span>话轮转换 · 3</span></div>
+          <div class="seg s-noise" style="flex:1 1 0"><span>1</span></div>
+        </div>
+        <p style="margin:0;font-size:.9375rem;color:var(--ink-2)"><strong>这个分裂本身就是要害</strong>：同样"没有重叠"，功能上可以是 BC（clip_010 换气间隙、clip_070 陈述断句处），也可以是纯粹交棒。两个轴必须分开标。</p>
+      </div>
+
+      <div class="mech">
+        <h3>还有两类样本，进评估集只会加噪声</h3>
+        <div class="pair">
+          <div>
+            <span class="tag" style="color:var(--turn)">转写有词 · 音频无声 · 3 条</span>
+            <span style="font-size:.9rem;color:var(--ink-2)">clip_088「文本是 yeah 但实际上听不出任何东西」；clip_024 实际听到的是 wait 而非转写的词。BC 标签若来自 ASR 文本，这几条是<strong>纯文本假阳性</strong>。</span>
+          </div>
+          <div>
+            <span class="tag" style="color:var(--noise)">录音问题</span>
+            <span style="font-size:.9rem;color:var(--ink-2)">clip_080 左声道出现对方<strong>回音</strong>；clip_096 的 <code>partner_text</code> 里出现 <code>[-1834.6s]</code> 这种<strong>异常负时间戳</strong>。</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── 4 ─────────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">第四部分</div>
+      <h2>这意味着什么</h2>
+    </div>
+
+    <div class="prose">
+      <p><strong>Paper 1（审计）—— 最后一块拼图完成了。</strong>"只差 F3 人工验证"现已做完，结论支持主命题：标签与人的感知不一致。而且给出了一条比 κ 更具体的证据 —— "停顿内"标签 <span class="k-intr">44% 假阴性</span>，二元 <code>Backchannel</code> 标签里混着 <span class="k-intr">29.6% 的打断</span>。</p>
+
+      <p><strong>对指标设计（F6 / BCRR / BCA）的直接后果。</strong>如果目标行为本身是分级的，那么用二元 event-F1 去打分，会把 BC-interruption 这类样本同时算成对的和对的 —— <strong>指标在自我对抗</strong>。这与 G1 那边测出的"26 个事件里只有 5 个被所有种子稳定做对"是同一类问题的两个侧面：评估目标本身没定义清楚，噪声就会被读成模型能力。</p>
+    </div>
+
+    <div class="callout warn">
+      <strong>但要克制 —— 现在还<em>不能说</em>"必须改成三级标注"。</strong>分级编码是单人、47 条、且偏难例的子集；BC-mid 只有 3 条；而 clip_066 那种"意图 vs 效果"的分歧，恰恰说明分级<em>本身</em>也需要先定义清楚按哪个轴分，否则只是把二元的分歧挪到三元里。
+    </div>
+
+    <div>
+      <div class="eyebrow" style="margin-bottom:.9rem">下一步 · 按性价比排序</div>
+      <div class="steps">
+        <div class="step"><p><b>先扩 note 覆盖</b> —— 让同一批 100 条全部有 note（现在 47 条），约 30 min。这是把"难例子集"变成全样本的<strong>前提</strong>，所有后续判断都卡在这一步。</p></div>
+        <div class="step"><p><b>找第二个标注者</b>做 20–30 条重叠，先看"纯 BC vs interruption"这条边界<strong>人跟人一致不一致</strong>。如果人自己都不一致，三元标注解决不了问题 —— 问题在定义。</p></div>
+        <div class="step"><p><b>再决定</b>要不要把 BC-mid 正式立为类别（目前 n=3，太少）。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 5 ─────────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head">
+      <div class="eyebrow">附：数据自查</div>
+      <h2>一处需要你确认</h2>
+    </div>
+
+    <div class="prose">
+      <p><strong>机械可校验的不一致：0 条</strong>（"说没重叠"→ overlaps 必须是 N；"说是 BC"→ heard_bc 必须是 Y）。</p>
+
+      <div class="callout warn" style="margin:1rem 0">
+        <code>clip_092</code> 的 note 写「听不清」，但 <code>heard_bc</code> 填了 <strong>Y</strong>。指南说"听不清就填 n"。如果这是有意为之，说明这条规则在实操里不好用，值得改指南。
+      </div>
+
+      <p><code>clip_000</code> 和 <code>clip_080</code> <strong>不是错误</strong>：前者 note 是"声音不清晰，感觉算是杂音类 backchannel"（听不清但仍算 BC），后者是"有回音，除此之外是正常话轮转换的 BC 词" —— 两条的 y/n 与 note 都自洽。分析脚本初版把它们误报成不一致，已修正检查逻辑。</p>
+    </div>
+  </section>
+
+  <footer>
+    报告全文 · docs/pilot_study/2026-09-15_f3_human_verification_results.md<br>
+    分级编码可逐条复核 · f3_kit/f3_analysis.json<br>
+    原始数据 · pilot_study/real_data/results/annotator/f3_kit/judgments2.csv
+  </footer>
+
+</div>

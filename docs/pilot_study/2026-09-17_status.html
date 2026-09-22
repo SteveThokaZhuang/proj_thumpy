@@ -1,0 +1,1288 @@
+<title>G1 现状盘点</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root{
+    --paper:#F8F9FB;
+    --surface:#FFFFFF;
+    --ink:#1A1E24;
+    --ink-2:#3D4650;
+    --muted:#5C6672;
+    --rule:#DFE3E8;
+    --rule-soft:#EDF0F3;
+    --ch-a:#A96A20;
+    --ch-b:#256C8C;
+    --dead:#8C3A2E;
+    --ok:#2F6B4F;
+    --code-bg:#F1F3F6;
+    --measure:66ch;
+    --shell:1000px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#12151A;
+      --surface:#181C22;
+      --ink:#E7EAEE;
+      --ink-2:#C2C9D2;
+      --muted:#8B95A1;
+      --rule:#2A3038;
+      --rule-soft:#22272E;
+      --ch-a:#D9A45E;
+      --ch-b:#6FB3D0;
+      --dead:#D98A78;
+      --ok:#6FBF95;
+      --code-bg:#1C2128;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12151A;
+    --surface:#181C22;
+    --ink:#E7EAEE;
+    --ink-2:#C2C9D2;
+    --muted:#8B95A1;
+    --rule:#2A3038;
+    --rule-soft:#22272E;
+    --ch-a:#D9A45E;
+    --ch-b:#6FB3D0;
+    --dead:#D98A78;
+    --ok:#6FBF95;
+    --code-bg:#1C2128;
+  }
+
+  *{box-sizing:border-box}
+
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+    font-size:16.5px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .shell{
+    max-width:var(--shell);
+    margin:0 auto;
+    padding:0 28px 96px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    padding:64px 0 30px;
+    border-bottom:2px solid var(--ink);
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 14px;
+  }
+  h1{
+    font-family:Spectral,Georgia,serif;
+    font-weight:700;
+    font-size:clamp(34px,5.2vw,52px);
+    line-height:1.1;
+    letter-spacing:-.015em;
+    margin:0;
+    text-wrap:balance;
+  }
+  .standfirst{
+    max-width:var(--measure);
+    margin:20px 0 0;
+    font-size:18px;
+    color:var(--ink-2);
+  }
+
+  /* ---------- ledger strip ---------- */
+  .strip{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:1px;
+    background:var(--rule);
+    border:1px solid var(--rule);
+    margin:34px 0 0;
+  }
+  .strip__cell{
+    background:var(--surface);
+    padding:16px 18px;
+  }
+  .strip__k{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--muted);
+    display:block;
+    margin-bottom:7px;
+  }
+  .strip__v{
+    font-size:15px;
+    font-weight:500;
+    line-height:1.35;
+    display:block;
+  }
+  .strip__v.is-dead{color:var(--dead)}
+  .strip__v.is-ok{color:var(--ok)}
+
+  /* ---------- sections ---------- */
+  section{padding-top:56px}
+  h2{
+    font-family:Spectral,Georgia,serif;
+    font-weight:600;
+    font-size:27px;
+    line-height:1.25;
+    letter-spacing:-.008em;
+    margin:0 0 6px;
+    text-wrap:balance;
+  }
+  h2 .num{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:14px;
+    font-weight:500;
+    color:var(--ch-b);
+    margin-right:12px;
+    vertical-align:2px;
+  }
+  h3{
+    font-family:"IBM Plex Sans",sans-serif;
+    font-weight:600;
+    font-size:16px;
+    letter-spacing:.01em;
+    margin:32px 0 8px;
+  }
+  .kicker{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:12px;
+    color:var(--muted);
+    margin:0 0 18px;
+  }
+
+  p{max-width:var(--measure);margin:0 0 16px}
+  .lede{font-size:18px;color:var(--ink-2)}
+  strong{font-weight:600;color:var(--ink)}
+  em{font-style:italic}
+  a{color:var(--ch-b);text-decoration-thickness:1px;text-underline-offset:2px}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--ch-b);outline-offset:3px;border-radius:2px}
+
+  ul,ol{max-width:var(--measure);margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 7px}
+  li::marker{color:var(--muted)}
+
+  code{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.875em;
+    background:var(--code-bg);
+    padding:.12em .38em;
+    border-radius:3px;
+  }
+
+  /* ---------- wrong / right blocks ---------- */
+  .verdict{
+    margin:26px 0;
+    border:1px solid var(--rule);
+    border-left:3px solid var(--dead);
+    background:var(--surface);
+    padding:20px 24px 22px;
+  }
+  .verdict.is-ok{border-left-color:var(--ok)}
+  .verdict__label{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11px;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+    color:var(--dead);
+    margin:0 0 12px;
+  }
+  .verdict.is-ok .verdict__label{color:var(--ok)}
+  .verdict__old{
+    font-size:16px;
+    color:var(--muted);
+    text-decoration:line-through;
+    text-decoration-color:var(--dead);
+    text-decoration-thickness:1.5px;
+    margin:0 0 12px;
+    max-width:var(--measure);
+  }
+  .verdict p:last-child{margin-bottom:0}
+  .verdict__new{font-size:16.5px;max-width:var(--measure)}
+
+  /* ---------- tables ---------- */
+  .scroll{
+    overflow-x:auto;
+    margin:22px 0;
+    border:1px solid var(--rule);
+    background:var(--surface);
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    font-size:14px;
+    font-variant-numeric:tabular-nums;
+    min-width:520px;
+  }
+  caption{
+    caption-side:top;
+    text-align:left;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11px;
+    letter-spacing:.11em;
+    text-transform:uppercase;
+    color:var(--muted);
+    padding:14px 18px 0;
+  }
+  th,td{
+    padding:11px 18px;
+    text-align:left;
+    border-bottom:1px solid var(--rule-soft);
+    vertical-align:top;
+  }
+  thead th{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    border-bottom:1px solid var(--rule);
+    white-space:nowrap;
+  }
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-family:"IBM Plex Mono",ui-monospace,monospace;white-space:nowrap}
+  .hi-own{color:var(--ch-a);font-weight:600}
+  .hi-mix{color:var(--ch-b);font-weight:600}
+  .flag{color:var(--dead);font-weight:600}
+
+  /* ---------- code / chains ---------- */
+  pre{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:13px;
+    line-height:1.7;
+    background:var(--code-bg);
+    border:1px solid var(--rule);
+    padding:18px 20px;
+    overflow-x:auto;
+    margin:20px 0;
+    color:var(--ink-2);
+  }
+  pre b{color:var(--dead);font-weight:500}
+
+  /* ---------- open questions ---------- */
+  .q{
+    border-top:1px solid var(--rule);
+    padding:18px 0 4px;
+    max-width:var(--measure);
+  }
+  .q:last-of-type{border-bottom:1px solid var(--rule);margin-bottom:24px}
+  .q__n{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:12px;
+    color:var(--ch-b);
+    margin-right:10px;
+  }
+  .q__t{font-weight:600}
+  .q p{margin:6px 0 12px;color:var(--ink-2);font-size:15.5px}
+
+  /* ---------- answered questions ---------- */
+  .badge{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:10.5px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    padding:2px 7px;
+    border:1px solid currentColor;
+    border-radius:2px;
+    margin-left:10px;
+    vertical-align:2px;
+    white-space:nowrap;
+  }
+  .badge--done{color:var(--ok)}
+  .badge--blocked{color:var(--dead)}
+
+  .aside{
+    border-left:2px solid var(--rule);
+    padding:2px 0 2px 18px;
+    margin:20px 0;
+    max-width:var(--measure);
+    color:var(--ink-2);
+    font-size:15.5px;
+  }
+  .aside > :last-child{margin-bottom:0}
+
+  .verdict ol,.verdict ul{margin-bottom:0}
+  .verdict li:last-child{margin-bottom:0}
+
+  hr{border:0;border-top:1px solid var(--rule);margin:56px 0 0}
+  footer{
+    padding-top:26px;
+    font-size:14px;
+    color:var(--muted);
+    max-width:var(--measure);
+  }
+  footer p{max-width:none}
+
+  @media (max-width:640px){
+    .shell{padding:0 18px 72px}
+    .masthead{padding-top:44px}
+    body{font-size:16px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">项目状态 · 2026-09-17</p>
+    <h1>G1 现状盘点</h1>
+    <p class="standfirst">
+      一份纯状态记录 —— 现在确定知道什么、什么被推翻了、什么还不知道。
+      不面向投稿，不需要为任何叙事服务。
+    </p>
+  </header>
+
+  <div class="strip">
+    <div class="strip__cell">
+      <span class="strip__k">头条结论</span>
+      <span class="strip__v is-dead">已推翻，是评估集伪影</span>
+    </div>
+    <div class="strip__cell">
+      <span class="strip__k">P0 优化侧</span>
+      <span class="strip__v">阴性 —— 排除欠拟合</span>
+    </div>
+    <div class="strip__cell">
+      <span class="strip__k">P1 决策边界</span>
+      <span class="strip__v">原假设被证伪</span>
+    </div>
+    <div class="strip__cell">
+      <span class="strip__k">P4 loss 记录</span>
+      <span class="strip__v is-dead">23 次训练全为假值</span>
+    </div>
+    <div class="strip__cell">
+      <span class="strip__k">五个待答问题</span>
+      <span class="strip__v is-ok">3 答完 · 2 待授权</span>
+    </div>
+  </div>
+
+  <!-- 0 -->
+  <section>
+    <h2><span class="num">0</span>一句话现状</h2>
+    <p class="lede">
+      G1 消融（own10 vs mixnorm）当初唯一 surviving 的结论 ——「mixnorm 不稳（F=18.64）」——
+      <strong>已被自己的后续分析推翻，确认是评估集流行率造成的伪影</strong>。
+      在自然流行率的评估集上，方差排序反转，mixnorm 的劣势变成一个<strong>均值效应</strong>而非方差效应 ——
+      而这个均值效应（ΔF1 ≈ +0.034）经 2026-09-17 晚复核，<strong>也判不住</strong>（§7.2）。
+    </p>
+    <p class="lede">
+      但<strong>翻掉的是 F1 那一层，不是全部</strong>。有两件事活了下来，而且比原来更硬：
+    </p>
+    <ul>
+      <li>
+        <strong>mixnorm 的种子间阈值离散确实更大</strong>：SD 比 2.88×，通过了显著性检验
+        （F(6,6)=8.28，置换 p=0.016）。margin 是 logits 的性质、与标签无关，
+        所以它<strong>不吃流行率伪影</strong>；在自然流行率集上复测依然稳（3.04×）。§7.1
+      </li>
+      <li>
+        这条离散<strong>主要来自「把对方混进来」</strong>（拿掉混音后比值 3.04× → 1.42×，p&lt;0.0001），
+        但混音之外还剩一层显著的、<strong>与评估时音频无关</strong>的模型层面差异（1.42×，CI 排除 1.0）。
+      </li>
+    </ul>
+    <p class="lede">
+      另有一项独立发现：<strong>全项目 23 次训练的 loss 记录全是假的（恒为 0.0）</strong>，
+      原因是 NaN 被 transformers 的过滤器吞掉 —— 但训练本身从未损坏。
+    </p>
+  </section>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">1</span>项目在做的事</h2>
+    <p>
+      用 FunAudioChat（语音 LLM）做<strong>听者反馈（backchannel / BC）事件检测</strong>：
+      给一段 10 秒音频，模型输出「在 x.x 秒有 BC」或「no backchannel」。
+    </p>
+    <ul>
+      <li>基座：FunAudioChat，LoRA 微调（rank 16, alpha 32）</li>
+      <li>评估：事件级 F1；<code>text_greedy=True</code>（贪心解码，确定性）</li>
+      <li>「开火」= 第一个 token 以数字开头；「不开火」= 输出 <code>no backchannel</code></li>
+    </ul>
+    <p>数据与环境的关键约束（仍然有效）：</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>项</th><th>值</th></tr></thead>
+        <tbody>
+          <tr><td>计算</td><td><strong>只能在 kimi/gpu02 上用 <code>srun --jobid=&lt;JOBID&gt; --overlap --ntasks=1</code></strong>，login 节点禁止跑任务</td></tr>
+          <tr><td>训练 / 评估 / probe 环境</td><td><code>conda activate funaudiochat</code></td></tr>
+          <tr><td>数据构建 / 纯分析环境</td><td><code>conda activate fd_analysis</code>（缺 transformers）</td></tr>
+          <tr><td>srun 执行的脚本位置</td><td>必须在<strong>共享盘</strong>（<code>/tmp</code> 是节点本地的）</td></tr>
+          <tr><td>样本对齐</td><td>2400</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">2</span>可以当基石用的东西</h2>
+    <p class="kicker">这几条经过反复检查，目前没有反例</p>
+    <ol>
+      <li>
+        <strong>全流程可跑通</strong>：数据构建 → LoRA 训练 → 生成式评估 → 事件级 F1，
+        7 种子 × 2 臂已完整跑完。
+      </li>
+      <li>
+        <strong>评估集边界过滤已修</strong>：<code>bc_windows(..., require_inside=True)</code> 排掉
+        横跨 10 秒块的不可答 GT 窗口。旧集 26 个 GT 事件里有 6 个（23%）横跨边界 ——
+        不过滤会凭空制造「模型永远做不对」的块。修完后的口径 = 报告口径（<code>_filt</code>）。
+      </li>
+      <li>
+        <strong><code>margin_max</code> 是决定贪心行为的那个量</strong>：<br>
+        <code>margin_max = max(logits[数字起始 token]) − max(logits[非起始 token])</code>。<br>
+        与模型自己实际「报 / 不报」的一致率 <strong>96.7%</strong>。
+        （早先用 <code>margin_lse</code>（类质量和）只有 68.3% —— 因为数字类横跨 28 个 token、
+        "no" 只有约 1 个，类质量和有系统性偏置。这个坑已经填了。）
+      </li>
+      <li><strong>P4 的因果链已用真实数据验证</strong>（见 §4），不是推断。</li>
+    </ol>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="num">3</span>G1 消融与那个被推翻的头条</h2>
+
+    <h3>3.1 实验设计</h3>
+    <p>同一批数据、同样 7 个随机种子，只改观测的构造方式：</p>
+    <ul>
+      <li><strong class="hi-own">own10</strong> —— 只喂自己的声道</li>
+      <li><strong class="hi-mix">mixnorm</strong> —— 两个声道各自电平对齐后相加</li>
+    </ul>
+
+    <h3>3.2 原结论</h3>
+    <div class="verdict">
+      <p class="verdict__label">已作废</p>
+      <p class="verdict__old">
+        mixnorm 跨种子方差是 own10 的 18.6 倍（F=18.64, p=0.0026）——
+        G1 里唯一经得起分布无关检验的结论
+      </p>
+      <p class="verdict__new">
+        该结论来自 E2 评估集（1600 块 / 1640 事件）：
+        <code>SD(mixnorm) = 0.1020</code> vs <code>SD(own10) = 0.0236</code>，
+        方差比 <code>F(6,6) = 18.67</code>，置换 <code>p = 0.0026</code>。
+        它一度被当成主要发现。
+      </p>
+    </div>
+
+    <h3>3.3 推翻它的证据</h3>
+    <p>
+      把同一批已训好的 adapter（<strong>没有重训</strong>，纯读盘）拿到
+      <strong>自然流行率</strong>的旧 300 块集上评：
+    </p>
+    <div class="scroll">
+      <table>
+        <caption>两套评估集上的方差对比</caption>
+        <thead>
+          <tr>
+            <th>评估集</th><th>真值正例率</th>
+            <th>corr(报的比例, F1) own10</th><th>mixnorm</th>
+            <th>SD(mixnorm)</th><th>SD(own10)</th><th>F</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>旧 300（自然流行率）</td>
+            <td class="num">0.06</td>
+            <td class="num">+0.471</td>
+            <td class="num">−0.122</td>
+            <td class="num">0.0183</td>
+            <td class="num">0.0234</td>
+            <td class="num flag">0.62</td>
+          </tr>
+          <tr>
+            <td>E2（事件密集）</td>
+            <td class="num flag">1.00</td>
+            <td class="num">+0.503</td>
+            <td class="num">+0.935</td>
+            <td class="num">0.1020</td>
+            <td class="num">0.0236</td>
+            <td class="num flag">18.67</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>两处关键事实：</strong></p>
+    <ol>
+      <li>
+        <strong>own10 的 SD 在两套集上几乎一模一样</strong>（0.0234 vs 0.0236）——
+        所以这不是「旧集更吵」，而是<strong>臂 × 评估集的交互</strong>：变的是 mixnorm，不是评估难度。
+      </li>
+      <li>
+        <strong>方差排序在自然流行率集上反转</strong>（F=0.62，即 mixnorm 反而更稳）。
+      </li>
+    </ol>
+
+    <h3>3.4 机制</h3>
+    <p>
+      E2 是「事件密集」集：1640 事件 / 1600 块，<strong>100% 的块都有 GT 正例，一个负例都没有</strong>。
+      在这种集上：
+    </p>
+    <pre>多报 → 只增加 TP，几乎不增加 FP → F1 随开火率单调上升</pre>
+    <p>
+      而 P1 已经测出 mixnorm 的各种子<strong>把决策边界画在了不同地方</strong>（见 §5）。
+      于是「阈值方差」在 E2 上被<strong>原样放大</strong>成 F1 的种子间方差。
+      自然流行率集上多报会被 FP 惩罚，<code>corr(报的比例, F1)</code> 从 +0.935 崩到 −0.122，
+      放大通道消失，方差随之回落。
+    </p>
+    <div class="verdict is-ok">
+      <p class="verdict__label">2026-09-17 晚补充（Q5）· 放大发生在哪一层，现在测清楚了</p>
+      <p class="verdict__new">
+        把同一批 adapter 的 margin 探针跑到自然流行率集上后发现，
+        <strong>各种子平均 margin 的 SD 几乎不动</strong>：
+        own10 0.183 → <strong>0.180</strong>，mixnorm 0.525 → <strong>0.546</strong>。
+        也就是说<strong>阈值离散本身与评估集无关</strong>，它是模型的性质。
+        变的只是「阈值离散 → F1 离散」这个<strong>映射</strong>：
+        E2 上没有负例，映射接近恒等；自然集上多报要吃 FP，映射被压平。
+        所以上面说的「放大通道」是<strong>映射</strong>层面的，不是 margin 层面的 ——
+        这也解释了为什么 §7.2 里扩集救不了 F1 那件事。
+      </p>
+    </div>
+
+    <div class="verdict">
+      <p class="verdict__label">附带的方法论教训</p>
+      <p class="verdict__new">
+        E2 的正例率是 1.00，所以<strong>块级 AUC 在这套集上根本无法定义</strong>（没有负例）。
+        当时报的 AUC=nan 不是代码错，是评估集的性质。
+        一个 100% 正例的集合没法测判别力，只能测操作点。
+      </p>
+    </div>
+
+    <h3>3.5 换回来之后剩下什么</h3>
+    <p>同种子配对检验（7 对，扣掉「种子难度」这一项）：</p>
+    <div class="scroll">
+      <table>
+        <caption>配对 ΔF1 (own10 − mixnorm)</caption>
+        <thead>
+          <tr><th>评估集</th><th>配对 ΔF1</th><th>t(6)</th><th>精确置换 p</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>旧 300 过滤版</td>
+            <td class="num"><strong>+0.0340 ± 0.0309</strong></td>
+            <td class="num">+2.91</td>
+            <td class="num"><strong>0.0469</strong></td>
+          </tr>
+          <tr>
+            <td>旧 300 原始版</td>
+            <td class="num">+0.0336 ± 0.0476</td>
+            <td class="num">+1.87</td>
+            <td class="num">0.0938</td>
+          </tr>
+          <tr>
+            <td>E2</td>
+            <td class="num">+0.1240 ± 0.1069</td>
+            <td class="num">+3.07</td>
+            <td class="num">0.0625</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      即：<strong>在诚实的评估集上，mixnorm 稳定地差一点点（ΔF1 ≈ +0.034），
+      而不是「不稳定」。</strong>
+    </p>
+    <div class="verdict">
+      <p class="verdict__label">2026-09-17 晚更正（见 §7.2）· 这个 +0.034 站不住</p>
+      <p class="verdict__new">
+        连同它的 p=0.0469，应降级为<strong>「方向一致，但未达可判定」</strong>。四条理由：
+      </p>
+      <ol>
+        <li>p=0.0469 恰好是 6/128 个符号模式，n=7 的分辨率下限是 0.0156；</li>
+        <li>留一去掉 7 个种子里 6 个都会掉出 0.05；</li>
+        <li>符号检验 6/7 → p=0.125；</li>
+        <li>
+          决定性的 —— 置换检验只让<strong>种子</strong>随机、把 300 块当固定，
+          算上<strong>块抽样</strong>后 SE 从 0.0117 涨到 0.0230，
+          t 从 2.91 掉到 <strong>1.48</strong>。
+          表格里那个「配对显著」只在第 (4) 条被忽略时才成立。
+        </li>
+      </ol>
+    </div>
+    <p>
+      注意 E2 上配对 p=0.0625 并不显著（虽然方差比 p=0.0026 显著）——
+      <strong>两个检验量不同</strong>，当初只报了方差检验，没报均值检验。
+    </p>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="num">4</span>P4：全项目 loss 记录是假的</h2>
+    <p class="kicker">训练没坏，记录坏了</p>
+
+    <h3>4.1 现象</h3>
+    <p>
+      所有 23 次训练的 <code>trainer_log.jsonl</code> 里，
+      <strong>每一行的 <code>loss</code> 都是 <code>0.0</code></strong>。
+    </p>
+
+    <h3>4.2 因果链（已在真实训练数据上验证）</h3>
+    <pre>FunAudioChat config:  enable_audio_invert_tower = True
+modeling_funaudiochat.py:793   sp_gen_kwargs['disable_speech'] = False   ← 硬编码
+        ↓
+每次 forward 都算 speech_loss
+        ↓
+文本-only 的回复 → speech_labels 全是 ignore_index
+        ↓
+ForCausalLMLoss(reduction='mean') 有效目标数为 0
+        ↓  值 = NaN，但<b>梯度 = 0</b>（不是 NaN）
+loss = text_loss + speech_loss = NaN
+        ↓
+transformers 4.52.3 trainer.py:2563  logging_nan_inf_filter 默认 True
+NaN 被丢弃，tr_loss 保持 0.0
+        ↓
+每行都记录 loss = 0.0</pre>
+
+    <p>真实数据实测（<code>_p4_loss_probe</code>）：</p>
+    <pre>outputs.text_loss   = 3.60995   (有限)
+outputs.speech_loss = nan
+outputs.loss        = nan
+labels 48/448 非 -100
+首个可训练参数 grad_norm = 0，finite = True</pre>
+
+    <h3>4.3 结论与影响</h3>
+    <ul>
+      <li>
+        <strong>训练本身从未损坏</strong>：梯度有限，grad_norm 正常。
+        NaN 只污染了<strong>记录</strong>，没有污染优化。
+      </li>
+      <li>
+        这不是 audio 或 mixnorm 特有的：纯文本的 f8/f9 也一样全是 0.0。
+      </li>
+      <li>
+        <strong>后果</strong>：这 23 次训练<strong>没有可用的 loss 曲线</strong>。
+        任何「loss 下降了吗 / 收敛了吗 / 有没有过拟合」的问题，现在都无法回答。
+        之前如果有基于 loss 的推断，都要作废。
+      </li>
+      <li>
+        <strong>修复</strong>：<code>scripts/g1_text_only_train.py</code> 里的
+        <code>DisableSpeechCallback</code> 在 <code>on_train_begin</code> 把
+        <code>model.sp_gen_kwargs['disable_speech'] = True</code>。
+        <strong>已写好但尚未在正式训练中启用</strong>（重训需要单独授权）。
+      </li>
+    </ul>
+  </section>
+
+  <!-- 5 -->
+  <section>
+    <h2><span class="num">5</span>P1：种子之间把边界画在了不同地方</h2>
+    <p>
+      探针：对同样的 400 块，取每个 adapter 的 first-token logits，算 <code>margin_max</code>。
+    </p>
+
+    <h3>5.1 原假设被证伪</h3>
+    <div class="verdict">
+      <p class="verdict__label">已证伪</p>
+      <p class="verdict__old">
+        原假设：mixnorm 把决策整体压到阈值附近 —— 即种子<em>内部</em>更靠边界
+      </p>
+      <p class="verdict__new">
+        测下来不对。种子<strong>内部</strong> mixnorm 甚至更果断（0.911 &gt; 0.777）。
+        真正炸掉的是<strong>各种子平均 margin 的位置</strong>（SD 大 2.9×）——
+        即 7 个种子各自把边界画在了不同的地方。
+      </p>
+    </div>
+    <div class="scroll">
+      <table>
+        <caption>种子内 vs 种子间</caption>
+        <thead>
+          <tr>
+            <th>arm</th>
+            <th>种子内 median(|margin|)（均值）</th>
+            <th>各种子平均 margin 的 SD</th>
+            <th>margin 跨 0 的块占比</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="hi-own">own10</td>
+            <td class="num">0.777</td>
+            <td class="num">0.183</td>
+            <td class="num">34%</td>
+          </tr>
+          <tr>
+            <td class="hi-mix">mixnorm</td>
+            <td class="num">0.911</td>
+            <td class="num flag">0.525</td>
+            <td class="num flag">60%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="verdict is-ok">
+      <p class="verdict__label">这条幸存了下来 · 已过显著性检验</p>
+      <p class="verdict__new">
+        「2.9×」这个 SD 比本身也挨过了显著性检验（<code>ari_g1_margin_sd_test.py</code>）：
+        <code>F(6,6) = 8.28</code>，精确置换 <code>p = 0.0160</code>
+        （超过 F 分布的 95% 临界值 5.82）。留一里只有去掉 seed 31337 会掉到 p = 0.079，
+        其余 6 个保持显著。
+        <br><br>
+        这一步是必须的 —— 「2.9 倍」同样是<strong>从 7 个点估出来的 SD</strong>，
+        正是 §3 那次翻车的同一类操作。但这次它挺住了，理由是
+        <strong>margin 是模型 logits 的性质、与评估集标签无关</strong>：
+        这条<strong>不吃流行率伪影</strong>，是 §3 那场翻车之后唯一幸存下来的 G1 结论。
+        自然流行率集上复测也稳（§7.3）：0.183 → 0.180 与 0.525 → 0.546，比值 2.88× → 3.04×。
+      </p>
+    </div>
+    <p>
+      跨 0 块占比（34% / 60%）独立地对上了更早测的行为层抛硬币率（36% / 62%）。
+      两套口径互相印证。
+    </p>
+
+    <h3>5.2 边界位置直接决定分数</h3>
+    <p><code>corr(每种子平均 margin, 每种子 F1)</code>：</p>
+    <ul>
+      <li><span class="hi-own">own10</span> <strong>+0.350</strong></li>
+      <li><span class="hi-mix">mixnorm</span> <strong>+0.965</strong></li>
+    </ul>
+    <p>
+      mixnorm 那里几乎是恒等式 —— <strong>这个臂的 F1 基本上就是它把阈值放在哪</strong>。
+      这正是 §3.4 里 E2 放大机制的输入。
+    </p>
+
+    <h3>5.3 有效性与等价性说明</h3>
+    <ul>
+      <li>
+        Q1/Q4 里 <code>corr(margin 符号, 模型自己的决定)</code> 接近恒等式，
+        只是<strong>探针有效性检验</strong>，不是证据。证据是 §5.1 的离散度和 §5.2 对 F1 的预测力。
+      </li>
+      <li>E2 上的块级 AUC = nan，原因见 §3.4（无负例），不是 bug。</li>
+    </ul>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <h2><span class="num">6</span>P0：优化侧排查</h2>
+    <p class="kicker">阴性结果</p>
+    <ul>
+      <li><code>corr(grad_norm, F1) = +0.10</code> —— <strong>不预测</strong>哪个种子崩。</li>
+      <li>
+        <code>‖B@A‖</code> 跨 run 只变 <strong>~1.5%</strong>，而 F1 变 <strong>114%</strong>。
+        所以「某些种子欠拟合」这个解释<strong>被排除</strong>。
+      </li>
+      <li>
+        注意：早先测的 <code>‖ΔW‖</code> 是被冻结的 <code>lora_A</code> 初值主导的，
+        已改成分别报 <code>‖A‖≈59.3 / ‖B‖≈8.6 / ‖B@A‖≈5.4</code>。
+      </li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section>
+    <h2><span class="num">7</span>五个问题的答复</h2>
+    <p class="kicker">2026-09-17 晚 · 三问答完，两问仍需重训（未获授权）</p>
+
+    <div class="scroll">
+      <table>
+        <caption>总览</caption>
+        <thead><tr><th>#</th><th>问题</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="num">1</td>
+            <td>mixnorm 的种子为什么落在不同阈值上</td>
+            <td><strong>定位到交互</strong>。数据顺序与 LoRA 初值在配对内被扣掉，都不是原因；混音本身是主因，但「增益数值失控」只算陪衬</td>
+          </tr>
+          <tr>
+            <td class="num">2</td>
+            <td>ΔF1 ≈ +0.034 站得住吗</td>
+            <td><strong class="flag">站不住</strong>。p=0.0469 是乐观口径；算上块抽样后 SE 从 0.0117 涨到 0.0230，t 掉到 1.48</td>
+          </tr>
+          <tr>
+            <td class="num">3</td>
+            <td><code>data_seed</code> 分离初始化 / shuffle 运气</td>
+            <td>未动（需重训）</td>
+          </tr>
+          <tr>
+            <td class="num">4</td>
+            <td>loss 曲线恢复后能看出什么</td>
+            <td>未动（需重训）</td>
+          </tr>
+          <tr>
+            <td class="num">5</td>
+            <td>margin 探针跑自然流行率集</td>
+            <td><strong class="hi-mix">做完了</strong>（§7.3）。§3.4 的机制要改写</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>7.1 Q1：排除法做到了「交互」</h3>
+    <p>三个候选：(a) 数据顺序 / shuffle、(b) LoRA 初值、(c) 两声道相加的增益不确定性。</p>
+    <p>
+      <strong>先扣掉 (a) 和 (b)。</strong> <code>scripts/ari_g1_seed_recon.py</code> 直接读
+      <code>training_args.bin</code> 与 <code>adapter_model.safetensors</code>：
+    </p>
+    <ul>
+      <li>
+        全部 14 个 run 的 <code>data_seed = None</code>（且 <code>full_determinism = False</code>）
+        ⇒ transformers 的样本顺序由 <code>seed</code> 派生，<strong>同 seed ⇒ 同数据顺序</strong>。
+      </li>
+      <li>
+        同 seed 跨臂的 <code>lora_A</code> 相对差 = <strong>0.111</strong>；
+        而跨 seed 同臂 = <strong>1.414 = √2</strong>
+        （两个独立随机向量的期望相对距离 —— 正是「初值本来就不同」时的取值）。
+      </li>
+    </ul>
+    <p>
+      于是<strong>同 seed 的 own10 / mixnorm 是一对「同初值 + 同数据顺序 + 同超参，
+      唯一差异是音频」的干净对照</strong>。对每一对而言，种子带来的 (a)(b) 都被扣掉了，
+      它们不可能是<strong>两臂之间</strong>差异的来源。
+    </p>
+
+    <p><strong>配对检验：音频不是系统性偏移。</strong></p>
+    <pre>每种子平均 margin 的配对差 d = mixnorm − own10
+  = −0.0689 ± 0.4828,   t(6) = −0.38,   精确置换 p = 0.703
+逐种子 d: −0.535  +0.285  −0.432  −0.152  −0.010  +0.809  −0.446</pre>
+    <p>
+      均值不显著 —— 音频<strong>不系统性地</strong>把阈值推高或推低。
+      但 <strong>d 本身的离散很大</strong>（SD 0.483），而 own10 整体跨种子 SD 只有 0.183。
+      同一个音频操纵，在不同的种子上给出<strong>方向不同、幅度不同</strong>的阈值移动。
+      这就是「交互」。
+    </p>
+
+    <p><strong>方差分解</strong>（<code>scripts/ari_g1_threshold_source.py</code>）：</p>
+    <pre>以两臂平均方差 0.1546 为分母:
+  种子层 Var(s)   = 0.0963   62.3%      s = (m+o)/2
+  音频层 Var(d)/4 = 0.0582   37.7%      d = m−o</pre>
+    <div class="aside">
+      <p>
+        <strong>更正</strong>：早先一版按 <code>Var(mixnorm)</code> 做分母，得出
+        「34.9% / 21.1% / 44% 协方差」。那个 44% 的「协方差」是<strong>代数恒等式</strong>
+        <code>Cov(s,d) ≡ (Var(m)−Var(o))/2</code>，只是「两臂方差不同」的改写，不是独立发现。
+        换成平均方差做分母后两项之和正好 100%。
+      </p>
+    </div>
+
+    <p>
+      <strong>SD 比本身通过了显著性检验</strong>（<code>scripts/ari_g1_margin_sd_test.py</code>）。
+      这一步是必须的 —— 「2.9 倍」同样是<strong>从 7 个点估出来的 SD</strong>，
+      正是 §3 那次翻车的同一类操作：
+    </p>
+    <pre>F(6,6) = 8.276   (SD 比 2.88x)
+精确置换 p (200k 次, 14 个值随机分 7/7) = 0.0160
+F 分布 95% 临界值 F(6,6) = 5.820   -&gt; 超过
+留一: 去掉 seed 31337 时 p = 0.0790 (掉出 0.05); 其余 6 个保持显著</pre>
+    <p>
+      <strong>margin 是模型 logits 的性质、与评估集标签无关</strong>，
+      所以这个结论<strong>不吃流行率伪影</strong> —— 它是 §3 那场翻车之后<strong>唯一幸存</strong>的 G1 结论。
+    </p>
+
+    <p><strong>候选 (c)：混音是主因，但「极端增益」不是。</strong></p>
+    <p>
+      <code>g1_mix_check.json</code> 里每块的归一化增益是
+      <code>gain = min(p95(own)/p95(part), 30)</code> —— 一个<strong>两个噪声百分位之比</strong>：
+    </p>
+    <div class="scroll">
+      <table>
+        <caption>归一化增益的分布（300 块）</caption>
+        <thead>
+          <tr><th>分位</th><th>p0–p5</th><th>p25</th><th>p50</th><th>p75</th><th>p95–p100</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>gain</td>
+            <td class="num">0.000</td><td class="num">0.232</td><td class="num">1.095</td>
+            <td class="num">5.870</td><td class="num flag">30.000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      中位 1.10，但 <strong>22.3% 的块 &gt; 10×、5% 顶到 30 的上限、
+      约 20% 因本人声道静音而 gain ≈ 0</strong>；只有 27.7% 的块落在 [0.5, 2]
+      这个「量级相当」的区间里。这是一个重尾到近乎失控的归一化。
+    </p>
+    <p>
+      <strong>内对照</strong>：gain ≈ 0 时对方被压成静音，这些块的 <code>mix == own</code> ——
+      两臂看到的<strong>音频完全相同</strong>。于是可以问：单独看这一部分，两臂还差多少？
+    </p>
+    <div class="scroll">
+      <table>
+        <caption>按 gain 子集看种子间 SD（面额口径）</caption>
+        <thead>
+          <tr><th>子集</th><th>块数</th><th>own10 SD</th><th>mixnorm SD</th><th>比值</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>全部 300 块</td>
+            <td class="num">300</td><td class="num">0.180</td><td class="num">0.546</td>
+            <td class="num"><strong>3.04×</strong></td>
+          </tr>
+          <tr>
+            <td><strong>gain ≈ 0（音频相同）</strong></td>
+            <td class="num">32</td><td class="num">0.266</td><td class="num">0.377</td>
+            <td class="num"><strong>1.42×</strong></td>
+          </tr>
+          <tr>
+            <td>0 &lt; gain &lt; 3</td>
+            <td class="num">171</td><td class="num">0.163</td><td class="num">0.563</td>
+            <td class="num">3.45×</td>
+          </tr>
+          <tr>
+            <td>gain ≥ 3</td>
+            <td class="num">97</td><td class="num">0.237</td><td class="num">0.610</td>
+            <td class="num">2.58×</td>
+          </tr>
+          <tr>
+            <td>gain = 30（顶上限）</td>
+            <td class="num">60</td><td class="num">0.281</td><td class="num">0.588</td>
+            <td class="num">2.10×</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <pre>块级 bootstrap:
+  gain≈0 : 1.42x  [1.12, 1.75]
+  全部   : 3.04x  [2.69, 3.42]
+  差     : +1.62  [+1.13, +2.09]    p &lt; 0.0001</pre>
+    <p><strong>读法：</strong></p>
+    <ol>
+      <li>
+        <strong>拿掉混音，比值从 3.04× 掉到 1.42×</strong> —— 大部分离散确实来自混音。
+      </li>
+      <li>
+        <strong>但 1.42× 的残差显著</strong>（CI 排除 1.0）—— 在音频<strong>完全相同</strong>的块上，
+        两臂的模型仍然不一样。这只能是<strong>训练期</strong>造成的模型层面差异，
+        不是评估时这一块的音频造成的。
+      </li>
+      <li>
+        <strong>增益的「幅度」不构成剂量-反应</strong>：比值在中间档最大（3.45×），
+        顶到上限的那 60 个块反而更低（2.10×）。所以不是「gain 越极端越不稳」。
+      </li>
+    </ol>
+    <p>
+      (c) 于是要拆成两半：<strong>「对方被混进来」这件事</strong>是主因（已证实）；
+      <strong>「增益数值失控」这件事</strong>只是陪衬。Q1 的答案落在
+      「<strong>模型（初值 + 顺序）× 混音</strong>的交互」上，而交互里那部分
+      <strong>与音频无关</strong>的模型差异，用现有数据无法再往下拆 ——
+      那需要 Q3 的 <code>data_seed</code> 实验（重训）。
+    </p>
+    <p class="aside">
+      逐块 across-seed SD 的版本给出同样方向：mixnorm 在高 gain 块 0.812 vs 低 gain 块 0.573，
+      置换 p = 0.0002；own10 作为对照几乎不动（0.485 vs 0.435）——
+      这是正确的对照，因为 gain 只作用于 mixnorm 的音频。
+    </p>
+
+    <h3>7.2 Q2：ΔF1 ≈ +0.034 —— 比「弱显著」更弱，站不住</h3>
+    <p>
+      §3.5 报的配对 ΔF1 = <strong>+0.0340 ± 0.0309</strong>，n=7，精确置换 p = <strong>0.0469</strong>。
+      四条独立线索都说这个数<strong>比它看起来更弱</strong>：
+    </p>
+    <p>
+      <strong>① 它落在检验的分辨率边缘。</strong> n=7 的符号翻转检验只有 2⁷ = 128 个符号模式，
+      两尾最小可能 p = 2/128 = 0.0156。观测 p = 0.0469 恰好是 <strong>6/128</strong> ——
+      已经在尾部，但那个尾部只有 6 个原子。
+    </p>
+    <p><strong>② 留一：去掉 7 个种子里 6 个都会掉出 0.05。</strong></p>
+    <pre>去掉 42 / 1234 / 7 / 3407 / 31337   -&gt;  p = 0.0938
+去掉 2024                            -&gt;  p = 0.0625
+去掉 55555（唯一反向的那个）         -&gt;  p = 0.0312</pre>
+    <p><strong>③ 符号检验（只看方向不看大小）6/7 → p = 0.125。</strong></p>
+    <p>
+      <strong>④ 决定性的一条：置换检验低估了不确定度。</strong>
+      置换检验只让<strong>种子</strong>随机，把 300 块 / 20 个事件当成固定的。
+      而「站得住吗」隐含的是能否推广到<strong>别的块</strong>，那就必须算上<strong>块抽样</strong>。
+      块级 bootstrap（7 个种子共用同一份重抽块）：
+    </p>
+    <pre>SE_seed  = 0.0117   &lt;- 置换检验实际用的那个
+SE_chunk = 0.0198   &lt;- 置换检验<b>没有</b>算的那个, 而且更大
+合成 SE  = 0.0230
+t = 0.0340 / 0.0230 = 1.48        (而不是只看种子时的 2.91)</pre>
+    <p>
+      7 个种子评的是同一批块，所以「换一批块会怎样」在所有种子间是<strong>共有</strong>的偏移，
+      在 across-seed SD 里被约掉了 —— 只按种子做置换检验会<strong>系统性低估</strong>真实不确定度。
+    </p>
+    <div class="verdict">
+      <p class="verdict__label">结论</p>
+      <p class="verdict__new">
+        <strong>ΔF1 = +0.034 目前判不住。</strong> 方向一致（6/7），但 p=0.0469 是乐观口径、
+        算上块抽样后 t = 1.48、留一去掉任意一个同向种子就掉出 0.05。
+        §3.5 里「弱但可复现」的说法应降级为<strong>「方向一致，但未达可判定」</strong>。
+      </p>
+    </div>
+    <p>
+      <strong>「扩集能不能救」—— 先算，再决定要不要花那 19 小时。</strong>
+      <code>scripts/ari_g1_eval_power.py</code> 把两个随机来源分开外推：
+    </p>
+    <pre>Var(种子)   = 1.366e-04   —— 不随事件数缩小 (它是模型的性质)
+Var(块抽样) = 3.939e-04   —— 按 1/k 缩
+
+  事件数   块数   GPU小时     SE       t
+     20    300      1.9    0.0230   1.48     &lt;- 现在
+     40    600      3.9    0.0183   1.86
+     80   1200      7.8    0.0153   2.22
+    160   2400     15.5    0.0136   2.50
+    320   4800     31.1    0.0127   2.68
+  k-&gt;∞            ∞       0.0117   2.91     &lt;- 天花板</pre>
+    <p>
+      <strong>天花板就是现在这个 t。</strong> 扩集不能把这个效应变显著 ——
+      它只能把现在这个「乐观的 p=0.0469」变成「名副其实的 p=0.0469」，
+      因为种子那一项根本不随事件数缩。
+    </p>
+    <p>
+      <strong>唯一能改判的是一件事</strong>：种子 55555 那个 −0.0345 到底是真反向还是噪声。
+      扩集正好能回答它 —— 若翻正，7/7 同向，两尾 p 触及 n=7 的下限 0.0156；
+      若它稳稳地负，这个结论就该被放弃。
+      <strong>这是一个「确认或否决」实验，不是「跑出显著性」实验。</strong>
+    </p>
+
+    <h3>7.3 Q5：margin 探针跑上了自然流行率集 —— §3.4 闭环，但机制位置要改写</h3>
+    <p>
+      对<strong>同一批 14 个 adapter</strong>（没有重训）在旧 300 块自然流行率集上重跑 margin 探针
+      （<code>scripts/g1_margin_natural.sh</code> → <code>ari_g1_margin_natural.py</code>，
+      输出 <code>g1_margin_nat_*.json</code>）。
+    </p>
+    <p><strong>① §3.4 的预言部分成立：跨 0 率确实回落。</strong></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>arm</th><th>E2（400 块）</th><th>自然集（300 块）</th><th>变化</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="hi-own">own10</td>
+            <td class="num">34%</td><td class="num">24%</td><td class="num">−10 pt</td>
+          </tr>
+          <tr>
+            <td class="hi-mix">mixnorm</td>
+            <td class="num flag">60%</td><td class="num flag">41%</td>
+            <td class="num"><strong>−18 pt</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      mixnorm 回落得更多，但<strong>没有收敛到 own10</strong> —— 差距从 26 pt 缩到 17 pt 仍在。
+      所以「E2 把跨 0 放大」是真的，但跨 0 率本身不是全部。
+    </p>
+    <p><strong>② 更重要的一条：阈值离散与评估集无关。</strong></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>arm</th><th>各种子平均 margin 的 SD（E2）</th><th>自然集</th><th>变化</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="hi-own">own10</td>
+            <td class="num">0.183</td><td class="num"><strong>0.180</strong></td><td class="num">不动</td>
+          </tr>
+          <tr>
+            <td class="hi-mix">mixnorm</td>
+            <td class="num">0.525</td><td class="num"><strong>0.546</strong></td><td class="num">不动</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      这和 §3.3 里 F1 的表现（own10 的 SD 两套集都是 0.0234 / 0.0236）是同一个形状：
+      <strong>变的是 mixnorm 与评估集的交互，而 mixnorm 的阈值离散本身是模型的性质，
+      换评估集不动它</strong>（比值 2.88× → 3.04×）。
+    </p>
+    <div class="verdict is-ok">
+      <p class="verdict__label">所以要改写 §3.4</p>
+      <p class="verdict__new">
+        放大通道发生在<strong>映射</strong>层面，不在 margin 层面：
+        E2 上没有负例，「阈值离散 → F1 离散」接近恒等；自然集上多报要吃 FP，映射被压平。
+      </p>
+    </div>
+    <p>
+      <strong>③ 顺带把 §7.1 的候选 (c) 做成了可判定的检验。</strong>
+      <code>g1_mix_check.json</code> 的 300 个块号与自然集探针<strong>完全一致</strong>（交集 300/300），
+      于是 gain 与 margin 可以逐块 join —— 这是 E2 上做不到的
+      （E2 与这份 gain 的块号交集为 0）。结果见 §7.1 最后一段。
+    </p>
+    <div class="aside">
+      <p>
+        探针把 margin 四舍五入到 4 位，自然集上有 <strong>50 个（块，种子）对的 margin 恰好是 0.000</strong>。
+        跨 0 的定义对 <code>&gt; 0</code> 与 <code>&lt; 0</code> 都要求严格，所以这些对两边都不算，
+        会让跨 0 率<strong>略微低估</strong>。占 2100 对里的 2.4%，不影响上面的比较。
+      </p>
+    </div>
+
+    <h3>7.4 Q3 / Q4：未动（仍需重训）</h3>
+    <p>两问都需要重训，<strong>未获授权</strong>，本轮没有启动：</p>
+    <ul>
+      <li>
+        <strong>Q3 <code>data_seed</code> 实验</strong>：要分离「初始化运气」和「shuffle 运气」，
+        必须把 <code>data_seed</code> 与 <code>seed</code> 解耦后重训。§7.1 的排除法只能做到
+        「(a)(b) 不是<strong>两臂差异</strong>的来源」，做不到「(a) 与 (b) 各自贡献多少」——
+        后者必须重训。
+      </li>
+      <li>
+        <strong>Q4 loss 曲线</strong>：<code>scripts/g1_text_only_train.py</code> 的
+        <code>DisableSpeechCallback</code> 已写好但未启用；
+        要看 loss 曲线至少得按 §4.3 重训一次。
+      </li>
+    </ul>
+
+    <h3>7.5 顺带发现：有一个 82544 块 / 4982 事件的自然流行率池（不用重训）</h3>
+    <p>Q2 的补救需要「更大的自然流行率集」。查下来它<strong>存在</strong>：</p>
+    <pre>候选 = 100 个 e4_raw 会话按 5s 步进的全部 10s 窗, 满足
+        不在 g1_ids.txt(2400) 里 且 块内 X2-Turn 帧数 &gt;= 20
+总计 82544 块 / 4982 个完整落在块内的 BC 事件 / 5.8% 正例</pre>
+    <p>
+      E2 之所以 100% 正例，是因为选块时<strong>额外要求「至少含 1 个 BC 事件」</strong>
+      （<code>ari_g1_eval2_ids.py</code> 的候选条件 2）—— 去掉那一条就是自然流行率。
+      池子分布在同样的 100 个会话上，所以现有 14 个 adapter 都没见过，
+      <strong>可以直接评，一行都不用重训</strong>。
+    </p>
+    <p>代价（实测斜率 1.666 s/块 × 14 个 adapter）：</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>规模</th><th>块数</th><th>事件</th><th>GPU 小时</th></tr></thead>
+        <tbody>
+          <tr><td>k=4</td><td class="num">1200</td><td class="num">~80</td><td class="num"><strong>7.8</strong></td></tr>
+          <tr><td>k=8</td><td class="num">2400</td><td class="num">~160</td><td class="num">15.5</td></tr>
+          <tr><td>全池</td><td class="num">82544</td><td class="num">4982</td><td class="num">~535</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      按 §7.2 的天花板分析，<strong>k=4 已经拿到大部分可得收益</strong>（t 1.48 → 2.22）。
+      但鉴于目前没有投稿目标，这 8 个 GPU 小时是否值得花留待决定 ——
+      <strong>本轮没有启动</strong>。
+    </p>
+  </section>
+
+  <!-- 8 -->
+  <section>
+    <h2><span class="num">8</span>杂务</h2>
+
+    <h3>8.1 已清理（2026-09-17）</h3>
+    <div class="scroll">
+      <table>
+        <caption>本轮删除</caption>
+        <thead><tr><th>删除</th><th>大小 / 内容</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>real_data/results/annotator/_p4_loss_probe_out/</code></td>
+            <td><strong>272M</strong> —— 探针的 6 步 LoRA checkpoint（其中 254M 是 <code>adapter_model.safetensors</code>），结论已落地</td>
+          </tr>
+          <tr>
+            <td><code>scripts/_inspect_gen.py</code></td>
+            <td>看 <code>generate</code> 签名的一次性探索</td>
+          </tr>
+          <tr>
+            <td><code>_p0_run.sh</code> <code>_p0b_run.sh</code> <code>_p1_val.sh</code> <code>_p1_all_run.sh</code></td>
+            <td>srun 环境变量包装（4–8 行）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <strong>P4 的证据没有随 checkpoint 一起消失</strong>：项目里 <strong>23 个真实训练 run
+      各自的 <code>trainer_log.jsonl</code> 都还在</strong>
+      （<code>real_data/results/**/saves/trainer_log.jsonl</code>）——
+      那才是「loss 恒为 0.0」的原始记录，§4 的数字就是数它们数出来的；
+      <code>_p4_loss_probe.py</code> 也随时能重跑复现。
+    </p>
+
+    <h3>8.2 保留</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>文件</th><th>支撑哪条结论</th></tr></thead>
+        <tbody>
+          <tr><td><code>_p4_loss_probe.py</code> (+ <code>.yaml</code>)</td><td>§4 那条因果链的实测证据</td></tr>
+          <tr><td><code>_insp_lora.py</code></td><td>§6 的 ‖A‖ / ‖B‖ / ‖B@A‖</td></tr>
+          <tr>
+            <td><code>_check_forward.py</code></td>
+            <td>margin 探针的有效性前提（前向 logits[-1] ≡ generate 首 token）。<code>ari_g1_margin_probe.py:88</code> 的注释引用它，两者都保留，引用有效</td>
+          </tr>
+          <tr><td><code>g1_margin_{own10,mixnorm}_s*.json</code> ×14</td><td>§5 全部数字的来源</td></tr>
+          <tr>
+            <td><code>g1_margin_toksets.json</code></td>
+            <td>探针的<strong>输入定义</strong>：「数字起始 token」与「非起始 token」两个 token 集合。删了探针就没法复跑</td>
+          </tr>
+          <tr><td><code>g1_margin_analyze.json</code></td><td>§5 的汇总产物</td></tr>
+          <tr><td><code>g1_text_only_train.py</code></td><td>P4 的正式修复，<strong>未启用</strong></td></tr>
+          <tr>
+            <td><code>ari_g1_margin_analyze.py</code> <code>ari_g1_prevalence_check.py</code> <code>ari_g1_margin_probe.py</code></td>
+            <td>分析脚本，可复跑</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>8.3 本轮新删</h3>
+    <ul>
+      <li>
+        <code>g1_margin_val_mix42.json</code> —— 一次失败的探针（返回 0 行，某个 wav 缺失），
+        已删除。同时给 <code>ari_g1_margin_probe.py</code> 加了<strong>缺 wav 就硬失败</strong>，
+        不再静默产出 0 行文件。
+      </li>
+    </ul>
+
+    <h3>8.4 本轮新增</h3>
+    <div class="scroll">
+      <table>
+        <caption>§7 全部数字的来源 · 均不需要 GPU 训练</caption>
+        <thead><tr><th>脚本</th><th>支撑</th></tr></thead>
+        <tbody>
+          <tr><td><code>ari_g1_seed_recon.py</code></td><td>§7.1 的 (a)(b) 判定（需在 GPU 作业内读 torch）</td></tr>
+          <tr><td><code>ari_g1_threshold_source.py</code></td><td>§7.1 配对分解、§7.2 配对检验</td></tr>
+          <tr><td><code>ari_g1_margin_sd_test.py</code></td><td>§5.1 / §7.1 的 SD 显著性</td></tr>
+          <tr><td><code>ari_g1_eval_power.py</code></td><td>§7.2 的扩集外推与天花板</td></tr>
+          <tr><td><code>g1_margin_natural.sh</code> → <code>ari_g1_margin_natural.py</code></td><td>§7.3 自然集 margin 探针</td></tr>
+          <tr><td><code>g1_margin_nat_*.json</code> ×14</td><td>§7.3 的原始产物（与 E2 的 <code>g1_margin_*.json</code> 分开命名）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      复跑顺序：<code>ari_g1_seed_recon.py</code> → <code>ari_g1_threshold_source.py</code>
+      → <code>ari_g1_margin_sd_test.py</code> → <code>ari_g1_eval_power.py</code>
+      → <code>g1_margin_natural.sh</code> → <code>ari_g1_margin_natural.py</code>。
+    </p>
+
+    <h3>8.5 仍待处理</h3>
+    <ul>
+      <li>
+        <strong>报告更正已加</strong>：<code>2026-09-11_g1_observation_ablation.md</code> 与
+        <code>2026-09-12_storyline_master.md</code> 头部各有一段 ⚠️ 更正，指向本文。
+      </li>
+      <li>
+        <strong>Q3 / Q4 需要重训授权</strong>；§7.5 那个 82544 块的池子要花 7.8–15.5 GPU 小时，
+        也还<strong>没启动</strong>。
+      </li>
+    </ul>
+  </section>
+
+  <hr>
+
+  <footer>
+    <h3 style="margin-top:26px">本文数字的来源</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>结论</th><th>产出方式</th></tr></thead>
+        <tbody>
+          <tr><td>§3.2–3.5 流行率对照 + 配对检验</td><td><code>scripts/ari_g1_prevalence_check.py</code>（纯读盘）</td></tr>
+          <tr><td>§5 margin 探针（E2）</td><td><code>scripts/ari_g1_margin_analyze.py</code> + 14 个 <code>g1_margin_*.json</code></td></tr>
+          <tr><td>§4 P4 因果链</td><td><code>_p4_loss_probe.py</code> 真实训练数据实测</td></tr>
+          <tr><td>§6 P0</td><td><code>_insp_lora.py</code></td></tr>
+          <tr><td>§7.1 (a)(b) 初值 / 顺序判定</td><td><code>scripts/ari_g1_seed_recon.py</code></td></tr>
+          <tr><td>§7.1 配对分解 + SD 检验</td><td><code>ari_g1_threshold_source.py</code>、<code>ari_g1_margin_sd_test.py</code></td></tr>
+          <tr><td>§7.2 配对检验 + 扩集外推</td><td><code>ari_g1_threshold_source.py</code>、<code>ari_g1_eval_power.py</code></td></tr>
+          <tr><td>§7.3 自然集 margin 探针</td><td><code>g1_margin_natural.sh</code> → <code>ari_g1_margin_natural.py</code></td></tr>
+          <tr><td>§7.1(c) gain ↔ margin join</td><td><code>g1_mix_check.json</code> × <code>g1_margin_nat_*.json</code>（块号交集 300/300）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:20px">
+      所有评估 json 在 <code>real_data/results/annotator/</code>。
+      Markdown 原件：<code>docs/pilot_study/2026-09-17_status.md</code>。
+    </p>
+  </footer>
+
+</div>
