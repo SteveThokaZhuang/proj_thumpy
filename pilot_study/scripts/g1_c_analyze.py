@@ -192,11 +192,68 @@ def downsample_to(data, cids, target_prev, seed=0):
     if target_prev >= cur:
         return cids, cur, len(cids)
     q = (gt / target_prev - len(n_pos)) / max(1, len(n_neg))
+    # 🔴 2026-09-22 (prereg §6.1): q > 1 意味着目标流行率**低于本法可达的下界**
+    # gt/(n_pos+n_neg) —— 也就是「一块不抽」时的值。旧实现把它 clamp 成 1 再原样返回,
+    # 于是**一个恒真的操作伪装成了一次变换**: 在 C 上实测打印 "4800 -> 4800 块,
+    # 实际 8.6458%", 不报错、什么也没做。降不到下界以下不是参数问题, 是**方法**问题:
+    # 只丢无事件块永远降不到 gt/(n_pos+n_neg) 以下, 必须丢事件块 ⇒ thin_to_prevalence。
+    if q > 1.0:
+        raise ValueError(
+            f"目标流行率 {target_prev:.4%} 低于本法可达下界 {cur:.4%} "
+            f"(q={q:.3f} > 1)。只丢无事件块做不到, 改用 thin_to_prevalence()。"
+            f" 见 2026-09-22_planC_prereg.md §6.1")
     q = min(1.0, max(0.0, q))
     rng = np.random.default_rng(seed)
     keep = sorted(n_pos + [c for c in n_neg if rng.random() < q])
     got = sum(data[("own10", "42")][c]["n_gt"] for c in keep) / max(1, len(keep))
     return keep, got, len(keep)
+
+
+def thin_to_prevalence(data, cids, target_prev, seed=0):
+    """把块集**抽稀**到 target_prev: 保留全部无事件块 + 随机抽一部分含事件块。
+
+    与 `downsample_to` 的分工 (prereg §6.1):
+      - `downsample_to` 只丢**无事件块** ⇒ 可达下界 = gt/(n_pos+n_neg) (一块不抽)。
+        适用于「本集已经不比目标稠」(e4c: target 就等于它自己)。
+      - 本函数丢**事件块** ⇒ 能把稠集降下来 (C: 8.65% → 3.94%)。
+        代价是事件数从 415 掉到 ~180, 这一读数天然更吵。
+
+    p (保留多少含事件块) 用二分搜索定: 保留集流行率 prev(p) = cum[p]/(p+n_neg),
+    cum 是**固定随机序**下前 p 个块的事件数 ⇒ p 之间是嵌套子集, prev 随 p 单调增
+    (加一个含事件块分子至少 +1、分母只 +1, 而 n_neg 很大时恒增)。
+
+    ⚠️ 抽稀是随机的 ⇒ **单次结果带抽样误差**, 调用方要对多个 seed 重复再报均值
+    (见 main 里的 R 次循环); 引用时不许只报单次。
+    """
+    ref = data[("own10", "42")]           # GT 与臂无关, 任取一臂定 n_gt
+    gt_all = sum(ref[c]["n_gt"] for c in cids)
+    n_all = len(cids)
+    if target_prev >= gt_all / max(1, n_all):
+        raise ValueError(
+            f"目标 {target_prev:.4%} 不低于当前 {gt_all/n_all:.4%}; "
+            f"抽稀只用来把流行率**降**下来 (要往上稀释得加块, 做不到)")
+    pos = [c for c in cids if ref[c]["n_gt"] > 0]
+    neg = [c for c in cids if ref[c]["n_gt"] == 0]
+
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(pos))
+    cum = np.concatenate([[0.0], np.cumsum(
+        [ref[pos[i]]["n_gt"] for i in order], dtype=np.float64)])
+
+    def prev(p):
+        return cum[p] / (p + len(neg))
+
+    lo, hi = 0, len(pos)
+    while lo < hi:                        # 找第一个 prev(p) >= target
+        mid = (lo + hi) // 2
+        if prev(mid) < target_prev:
+            lo = mid + 1
+        else:
+            hi = mid
+    cand = {max(0, lo - 1), lo, min(len(pos), lo + 1)}
+    best = min(cand, key=lambda p: abs(prev(p) - target_prev))
+    keep = sorted(neg + [pos[i] for i in order[:best]])
+    return keep, prev(best), len(keep)
 
 
 def report(name, data, B=4000):
@@ -245,6 +302,9 @@ def main():
     ap.add_argument("--set", required=True, help="e4c / c / union")
     ap.add_argument("--match-prevalence", type=float, default=0.039375,
                     help="同仪器读数的目标流行率 (默认 e4c 实测值)")
+    ap.add_argument("--match-draws", type=int, default=200,
+                    help="抽稀读数的重复次数 (§6.1): 抽稀本身是随机的, "
+                         "单次结果不许引用, 要报跨 R 次的均值与 SD")
     ap.add_argument("--boot", type=int, default=4000)
     args = ap.parse_args()
 
@@ -266,14 +326,53 @@ def main():
         return
     res["main"] = r
 
-    # ---- 同仪器读数: 子采样到 e4c 的流行率 ----
+    # ---- 同仪器读数: 把流行率对齐到 e4c (§4.2; 方法见 §6.1) ----
     d, f1, cids = delta_by_seed(data)
-    keep, got, n = downsample_to(data, cids, args.match_prevalence)
-    sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
-    print(f"\n  [同仪器] 子采样到 {args.match_prevalence:.4%}: "
-          f"{len(cids)} -> {n} 块, 实际流行率 {got:.4%}")
-    rs = report(f"{args.set} (matched)", sub, args.boot)
-    res["matched"] = rs
+    cur = sum(data[("own10", "42")][c]["n_gt"] for c in cids) / len(cids)
+    print(f"\n  [同仪器] 目标流行率 {args.match_prevalence:.4%}; "
+          f"本集当前 {cur:.4%}")
+
+    if cur <= args.match_prevalence * 1.0001:
+        # 本集不稠于目标 (e4c 就是这样: 目标就等于它自己) ⇒ 原样, 一个块都不动
+        keep, got, n = downsample_to(data, cids, args.match_prevalence)
+        sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
+        print(f"    本集不稠于目标 ⇒ 不抽稀 ({len(cids)} 块, {got:.4%}); "
+              f"这就是它自己 (自洽性检查)")
+        res["matched"] = report(f"{args.set} (matched)", sub, args.boot)
+    else:
+        # 本集更稠 (C: 8.65% vs 3.94%) ⇒ 按 §6.1 抽稀事件块。
+        # 抽稀是**随机**的 ⇒ 跑 R 次, 报跨次均值与 SD。单次结果不许引用。
+        R = args.match_draws
+        deltas, ses, prevs, ns = [], [], [], []
+        for r in range(R):
+            keep, got, n = thin_to_prevalence(data, cids,
+                                              args.match_prevalence, seed=r)
+            sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
+            dd, _, cc = delta_by_seed(sub)
+            deltas.append(float(np.mean(dd)))
+            prevs.append(got); ns.append(n)
+            if r == 0:
+                res["matched_one_draw"] = report(
+                    f"{args.set} (matched, 第 1 次抽稀, 仅为留档)", sub, args.boot)
+            if r < 20:
+                # bootstrap 只在前 20 次里跑: 要报的是 SE 的**典型值**, 不是逐次的。
+                # 200 次全跑 boot 要 ~1 h 纯 CPU, 换不来信息。
+                _, sd_r, _, _ = boot(sub, cc, B=args.boot)
+                ses.append(sd_r)
+        deltas = np.array(deltas)
+        print(f"\n  [同仪器] R={R} 次抽稀: 块数均值 {np.mean(ns):.0f}, "
+              f"实际流行率均值 {np.mean(prevs):.4%} (目标 {args.match_prevalence:.4%})")
+        print(f"    ΔF1 跨 {R} 次抽稀: 均值 {deltas.mean():+.4f}  "
+              f"抽稀间 SD {deltas.std(ddof=1):.4f}  "
+              f"bootstrap SE 均值 {np.mean(ses):.4f} (前 {len(ses)} 次)")
+        print(f"    ⚠️ 抽稀间 SD 是**抽稀这一操作本身**的随机, 单独报, 不并进 SE")
+        res["matched"] = dict(
+            n_draws=R, target=args.match_prevalence,
+            n_chunks_mean=float(np.mean(ns)), prevalence_mean=float(np.mean(prevs)),
+            delta_mean=float(deltas.mean()),
+            delta_sd_across_draws=float(deltas.std(ddof=1)),
+            boot_se_mean=float(np.mean(ses)), n_boot=len(ses),
+            delta_by_draw=[float(x) for x in deltas])
 
     out = f"{ANNOT}/g1_c_analyze_{args.set}.json"
     json.dump(res, open(out, "w"), indent=1, ensure_ascii=False)
