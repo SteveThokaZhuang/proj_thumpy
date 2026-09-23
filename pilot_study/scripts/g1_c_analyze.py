@@ -83,9 +83,19 @@ def f1_over(recs):
 
 
 def delta_by_seed(data):
-    """{(arm,seed): {cid: rec}} -> (per-seed ΔF1 列表, 并集上的 F1 表)。
+    """{(arm,seed): {cid: rec}} -> (per-seed ΔF1, F1 表, 并集 cid, **实际用上的种子**)。
 
     ⚠️ 并集 = **全部 arm/seed 共用**的 cid 集合。缺块会让并集不等价。
+
+    🔴 第 4 个返回值是后加的, 原因是老版这里长这样:
+
+        d = [... for s in SEEDS if ("own10", s) in f1 and ("mixnorm", s) in f1]
+
+    `if` 子句**静默跳过**缺的种子 —— 12/14 时它会安安静静产出一个 6 种子的 d,
+    `d.mean()/d.std(ddof=1)/np.sqrt(len(d))` 全都自动适应, 而产物里 `"seeds"`
+    仍写着全 7 个 (老账 §四.16「写死常数跟现算量同行就借走它的可信度」,
+    以及「跑批没跑完」)。现在种子列表是**算出来的**, 调用方没机会再猜;
+    缺种子则由 assert_complete() 在入口直接拦下。
     """
     cids = None
     for k, v in data.items():
@@ -96,9 +106,37 @@ def delta_by_seed(data):
     f1 = {}
     for (arm, seed), v in data.items():
         f1[(arm, seed)] = f1_over([v[c] for c in cids])[0]
-    d = [f1[("own10", s)] - f1[("mixnorm", s)] for s in SEEDS
-         if ("own10", s) in f1 and ("mixnorm", s) in f1]
-    return d, f1, cids
+    seeds_used = [s for s in SEEDS
+                  if ("own10", s) in f1 and ("mixnorm", s) in f1]
+    d = [f1[("own10", s)] - f1[("mixnorm", s)] for s in seeds_used]
+    return d, f1, cids, seeds_used
+
+
+def assert_complete(data, name, allow_partial=False):
+    """入口闸: 每个 (arm, seed) 都必须在, 否则拒绝出数。
+
+    这是**唯一**能挡住「半截产物冒充最终版」的地方 —— 产物文件名
+    (g1_c_analyze_c.json) 与内容形状都不随完整性变化, 事后无法分辨。
+    确实要跑残缺集就显式 --allow-partial, 产物会记 partial=true。
+    """
+    missing = [(a, s) for a in ARMS for s in SEEDS if (a, s) not in data]
+    n_expect = len(ARMS) * len(SEEDS)
+    if not missing:
+        print(f"[完整性] {name}: {n_expect}/{n_expect} 个 (arm,seed) 齐 ✅")
+        return True
+    lines = [f"  缺 {len(missing)}/{n_expect} 个 (arm,seed):"]
+    for a, s in missing:
+        lines.append(f"    缺 {a}_s{s}"
+                     f"  ->  {ANNOT}/g1_eval_{a}{SUFFIX[s]}_{name}.json")
+    body = "\n".join(lines)
+    if not allow_partial:
+        raise SystemExit(
+            f"\n🔴 [{name}] 输入不完整, 拒绝出数。\n{body}\n"
+            f"  delta_by_seed 会静默跳过这些种子 ⇒ 残缺产物与最终版无法区分。\n"
+            f"  等齐了再跑; 非要现在跑就加 --allow-partial。\n")
+    print(f"\n🔴 [{name}] **残缺输入, 已由 --allow-partial 放行**\n{body}")
+    print("  ⚠️ 本次产物的 seeds 字段只列实际用上的种子; 引用时必须注明 partial。")
+    return False
 
 
 def _f1_from_counts(tp, fp, gt):
@@ -151,6 +189,13 @@ def boot(data, cids, B=4000, seed=0, lv=("sess", "block", "seed")):
     assert S * C == len(cids), f"块数 {len(cids)} 不能被会话数 {S} 整除"
     order = sorted(range(len(cids)), key=lambda i: (cids[i].split("_")[0], cids[i]))
     keys = [s for s in SEEDS if ("own10", s) in data and ("mixnorm", s) in data]
+    # 🔴 这里也必须拦: boot 算的**就是种子那一路的 SE**, 少一个种子直接改这个数。
+    #    assert_complete() 已在入口拦过残缺输入, 但 --allow-partial 会放行 ——
+    #    那时候至少要让本函数自己说清楚拿到的到底是什么, 而不是照常数继续算。
+    assert len(data) == 2 * len(keys), (
+        f"boot: data 有 {len(data)} 个 (arm,seed) 键, 但只认出 {len(keys)} 个"
+        f"双全种子 ({keys})。有种子缺了一条臂, 或文件名带了 SEEDS 之外的种子 —— "
+        f"两种情况都会让种子那一路的 SE 算错。")
     rng = np.random.default_rng(seed)
 
     arr = {}
@@ -260,14 +305,14 @@ def report(name, data, B=4000):
     print(f"\n{'='*70}\n[{name}]  (arm,seed) 组数 = {len(data)}")
     if not data:
         print("  无数据"); return None
-    d, f1, cids = delta_by_seed(data)
+    d, f1, cids, seeds_used = delta_by_seed(data)
     n_ev = sum(1 for c in cids if data[("own10", "42")][c]["n_gt"] > 0)
     gt = sum(data[("own10", "42")][c]["n_gt"] for c in cids)
     print(f"  并集 {len(cids)} 块 / 覆盖 {len({c.split('_')[0] for c in cids})} 会话 / "
           f"{gt} 个真值事件")
     print(f"  含事件块 {n_ev} = {n_ev/len(cids):.4%}  ← 流行率, 跨集比之前必看")
     for arm in ARMS:
-        v = [f1[(arm, s)] for s in SEEDS if (arm, s) in f1]
+        v = [f1[(arm, s)] for s in seeds_used]
         if v:
             print(f"  F1[{arm:8s}] = {np.mean(v):.4f} ± {np.std(v, ddof=1):.4f} "
                   f"(跨 {len(v)} 种子)")
@@ -289,12 +334,13 @@ def report(name, data, B=4000):
           f"   t = {m/sd if sd else float('nan'):+.2f}")
     return dict(n_chunks=len(cids), n_events=int(gt),
                 prevalence=gt / len(cids),
+                n_seeds=len(seeds_used), seeds=seeds_used,
                 delta_mean=float(d.mean()), delta_sd=float(d.std(ddof=1)),
                 delta_by_seed=[float(x) for x in d],
                 se_components=comp,
                 boot_mean=m, boot_se=sd, boot_ci=[lo, hi],
-                f1={f"{a}_{s}": float(f1[(a, s)]) for a in ARMS for s in SEEDS
-                    if (a, s) in f1})
+                f1={f"{a}_{s}": float(f1[(a, s)]) for a in ARMS
+                    for s in seeds_used})
 
 
 def main():
@@ -306,6 +352,9 @@ def main():
                     help="抽稀读数的重复次数 (§6.1): 抽稀本身是随机的, "
                          "单次结果不许引用, 要报跨 R 次的均值与 SD")
     ap.add_argument("--boot", type=int, default=4000)
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="允许残缺输入 (默认禁止)。产物会记 partial=true "
+                         "且 seeds 只列实际用上的 —— 引用时必须注明。")
     args = ap.parse_args()
 
     if args.set == "union":
@@ -320,14 +369,20 @@ def main():
     else:
         data = load_set(args.set)
 
-    res = {"set": args.set, "seeds": SEEDS}
+    complete = assert_complete(data, args.set, args.allow_partial)
+    _, _, _, seeds_used = delta_by_seed(data)
+    res = {"set": args.set,
+           "seeds": seeds_used,                  # 算出来的, 不是写死的 SEEDS
+           "n_seeds": len(seeds_used),
+           "n_seeds_expected": len(SEEDS),
+           "partial": not complete}
     r = report(args.set, data, args.boot)
     if r is None:
         return
     res["main"] = r
 
     # ---- 同仪器读数: 把流行率对齐到 e4c (§4.2; 方法见 §6.1) ----
-    d, f1, cids = delta_by_seed(data)
+    d, f1, cids, _ = delta_by_seed(data)
     cur = sum(data[("own10", "42")][c]["n_gt"] for c in cids) / len(cids)
     print(f"\n  [同仪器] 目标流行率 {args.match_prevalence:.4%}; "
           f"本集当前 {cur:.4%}")
@@ -348,7 +403,7 @@ def main():
             keep, got, n = thin_to_prevalence(data, cids,
                                               args.match_prevalence, seed=r)
             sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
-            dd, _, cc = delta_by_seed(sub)
+            dd, _, cc, _ = delta_by_seed(sub)
             deltas.append(float(np.mean(dd)))
             prevs.append(got); ns.append(n)
             if r == 0:
