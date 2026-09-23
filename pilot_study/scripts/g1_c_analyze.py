@@ -181,8 +181,30 @@ def boot(data, cids, B=4000, seed=0, lv=("sess", "block", "seed")):
       - 只抽会话 ⇒ 漏掉块那一路 (本脚本初版实测 0.0054 vs 三级 ~0.0092)。
     `lv` 控制开哪几级, 用来把总 SE 分解回三个分量。
 
+    🔴 **上面那条里的「三级 ~0.0092」正是改成现在这个快版之前的实测值**
+    (2026-09-23 发现): 换估计量时没更新注释, 于是**注释在描述一个已经不存在的函数**。
+
     实现要点: 每个会话的块数相同 (e4c/C 都是 48) ⇒ reshape 成 (S, N, 3),
-    会话重抽 = 抽行、块重抽 = 抽列, 都是 fancy-index, 与逐块重抽等价且快得多。
+    会话重抽 = 抽行、块重抽 = 抽列, 都是 fancy-index。
+
+    🔴 **本函数的合并层级不是「会话内逐块重抽」**。列下标 `ci` 对**所有会话共用**
+    ⇒ 会话 i 被抽 m_i 次、列 j 被抽 n_j 次时, 和 = Σ_ij m_i·n_j·a[i,j] —— 一个
+    **行×列的乘积测度**, 既不是池化 iid 抽块, 也不是聚类重抽。实测 (`g1_c_boot_ragged_probe.py`,
+    B=4000 ⇒ MC 1.1%):
+
+    | 层级  |    e4c 本函数 | e4c `boot_clustered` |     C 本函数 | C `boot_clustered` |
+    |-------|--------------|----------------------|-------------|--------------------|
+    | sess  |      0.00538 |              0.00538 |     0.00665 |            0.00665 |
+    | block |      0.00516 |              0.00518 |     0.00659 |            0.00723 |
+    | seed  |      0.00391 |              0.00391 |     0.00549 |            0.00549 |
+    | all   |      0.01052 |      0.00917 (−12.9%) |     0.01379 |    0.01192 (−13.5%) |
+
+    sess/seed 完全一致; block 在 e4c 上差 0.4% (MC 内)、在 C 上差 9.7% (**超出** MC);
+    合并层级两集都差 ~13%。**点估计不受影响** (e4c 0.02527→0.02535, C 0.04263→0.04298,
+    都是同一样本值上的 bootstrap 抖动)。C 的 ✅ 判据在两者下都成立 (t 3.09 → 3.61)。
+
+    ⚠️ **本函数保持原样冻结** —— e4c/C 的预登记读数都是它算的, 不许改它的行为。
+    要文档承诺的那个估计量请用 `boot_clustered()` (抽稀后块数不等的场合也**只有**它能用)。
     """
     S = len({c.split("_")[0] for c in cids})
     C = len(cids) // S
@@ -218,6 +240,92 @@ def boot(data, cids, B=4000, seed=0, lv=("sess", "block", "seed")):
          else ds[gi, np.arange(B)[:, None]].mean(axis=1))
     return float(d.mean()), float(d.std()), float(np.percentile(d, 2.5)), \
         float(np.percentile(d, 97.5))
+
+
+def boot_clustered(data, cids, B=4000, seed=0, lv=("sess", "block", "seed")):
+    """真·三级 bootstrap: 抽**会话** × 在每个被抽中的会话内抽**它自己的块** × 抽**种子**。
+
+    这是 `boot()` 文档字符串承诺的估计量, 也是**块数不等时唯一有定义**的版本 ——
+    `boot()` 要求 reshape 成 (S, C, 3), 而 `thin_to_prevalence()` 按块丢 ⇒
+    会话参差 (C 抽稀后实测 39..48) ⇒ 直接抛断言。
+
+    与 `boot()` 的差别**只在合并与 block 层级**: `boot()` 把列下标对所有会话共用
+    (行×列乘积测度), 本函数让每个被抽中的会话各自从自己的块里重抽 (聚类重抽)。
+    sess/seed 两集都完全一致, block 在 e4c 上一致、在 C 上差 9.7% —— 实测表见 `boot()`。
+
+    实现: 会话 j 被抽中 m_j(b) 次 ⇒ 它对第 b 次重抽的贡献 = **m_j(b) 个独立的重抽和**,
+    每个是 n_j 次有放回抽样。用 multinomial 一次算出 Kj 个独立重抽和 (BLAS 做 matmul),
+    再按 m_j(b) 掩码求和 —— 比逐次抽快得多, 且各 key 共用同一批计数 (抽一次用 14 遍)。
+
+    ⚠️ 不拿它去覆盖 `boot()` 的历史数字: e4c/C 的**预登记**读数用的是 `boot()`。
+    """
+    bysess = {}
+    for c in cids:
+        bysess.setdefault(c.split("_")[0], []).append(c)
+    sess = sorted(bysess)
+    S = len(sess)
+    keys = [s for s in SEEDS if ("own10", s) in data and ("mixnorm", s) in data]
+    assert len(data) == 2 * len(keys), (
+        f"boot_clustered: data 有 {len(data)} 个 (arm,seed) 键, 但只认出 {len(keys)} 个"
+        f"双全种子 ({keys}) —— 同 boot(), 种子那一路会算错。")
+    rng = np.random.default_rng(seed)
+
+    if "sess" in lv:
+        si = rng.integers(0, S, size=(B, S))
+        flat = (si + np.arange(B)[:, None] * S).ravel()
+        m = np.bincount(flat, minlength=B * S).reshape(B, S).astype(np.int64)
+    else:
+        m = np.ones((B, S), dtype=np.int64)
+
+    tot = {k: np.zeros((B, 3), dtype=np.float64) for k in data}
+    for j, s in enumerate(sess):
+        cl = bysess[s]
+        n_j = len(cl)
+        vals = {k: np.array([[data[k][c]["tp"], data[k][c]["fp"],
+                              data[k][c]["n_gt"]] for c in cl], dtype=np.float64)
+                for k in data}
+        if "block" in lv:
+            Kj = int(m[:, j].max())
+            if Kj == 0:
+                continue
+            cnt = rng.multinomial(n_j, np.full(n_j, 1.0 / n_j), size=(B, Kj))
+            keep = np.arange(Kj)[None, :] < m[:, j][:, None]
+            for k in data:
+                tot[k] += ((cnt @ vals[k]) * keep[..., None]).sum(1)
+        else:
+            for k in data:
+                tot[k] += m[:, j][:, None] * vals[k].sum(0)[None, :]
+
+    f1 = {k: _f1_from_counts(t[:, 0], t[:, 1], t[:, 2]) for k, t in tot.items()}
+    ds = np.stack([f1[("own10", s)] - f1[("mixnorm", s)] for s in keys])
+    gi = rng.integers(0, len(keys), size=(B, len(keys))) if "seed" in lv else None
+    d = (ds.mean(axis=0) if gi is None
+         else ds[gi, np.arange(B)[:, None]].mean(axis=1))
+    return float(d.mean()), float(d.std()), float(np.percentile(d, 2.5)), \
+        float(np.percentile(d, 97.5))
+
+
+def truncate_balanced(cids, seed=0):
+    """把参差的块集**截断**到每会话同样块数 (取最小的那个), 恢复方形。
+
+    存在的理由: 同仪器读数抽稀后形状参差, 而**预登记的** `boot()` 只吃方形。
+    截断让它沿用原封不动的预登记估计量, 代价是丢掉块多的会话里多出来的那些
+    (C 实测 min 39 / max 48 ⇒ 只保留 85.3%)。
+
+    这是与 `boot_clustered()` 并列的**稳健性对照**, 不是主路径 —— 它同时改了
+    「估计量」和「数据」两样东西, 所以两者之差不能单独归给任何一方。
+    """
+    bysess = {}
+    for c in cids:
+        bysess.setdefault(c.split("_")[0], []).append(c)
+    k = min(len(v) for v in bysess.values())
+    rng = np.random.default_rng(seed)
+    out = []
+    for s in sorted(bysess):
+        v = sorted(bysess[s])
+        idx = sorted(rng.permutation(len(v))[:k])
+        out += [v[i] for i in idx]
+    return out
 
 
 def downsample_to(data, cids, target_prev, seed=0):
@@ -301,7 +409,9 @@ def thin_to_prevalence(data, cids, target_prev, seed=0):
     return keep, prev(best), len(keep)
 
 
-def report(name, data, B=4000):
+def report(name, data, B=4000, boot_fn=boot):
+    """`boot_fn` 决定用哪个三级 bootstrap: 方形集用 `boot()` (预登记那个),
+    抽稀后的参差集必须用 `boot_clustered()`。用了哪个会写进返回值, 便于事后对账。"""
     print(f"\n{'='*70}\n[{name}]  (arm,seed) 组数 = {len(data)}")
     if not data:
         print("  无数据"); return None
@@ -323,13 +433,14 @@ def report(name, data, B=4000):
     for name, lv in (("sess", ("sess",)), ("block", ("block",)),
                      ("seed", ("seed",)),
                      ("all", ("sess", "block", "seed"))):
-        _, s_, _, _ = boot(data, cids, B=B, lv=lv)
+        _, s_, _, _ = boot_fn(data, cids, B=B, lv=lv)
         comp[name] = float(s_)
-    m, sd, lo, hi = boot(data, cids, B=B)
+    m, sd, lo, hi = boot_fn(data, cids, B=B)
     print(f"  ΔF1 均值 = {d.mean():+.4f}  (逐种子 SE "
           f"{d.std(ddof=1)/np.sqrt(len(d)):.4f})")
     print(f"  SE 分解: 会话 {comp['sess']:.4f} | 块 {comp['block']:.4f} | "
-          f"种子 {comp['seed']:.4f}  ⇒ 合并 {comp['all']:.4f}")
+          f"种子 {comp['seed']:.4f}  ⇒ 合并 {comp['all']:.4f}"
+          f"   [估计量 {boot_fn.__name__}]")
     print(f"  三级 bootstrap: {m:+.4f} ± {sd:.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]"
           f"   t = {m/sd if sd else float('nan'):+.2f}")
     return dict(n_chunks=len(cids), n_events=int(gt),
@@ -337,7 +448,7 @@ def report(name, data, B=4000):
                 n_seeds=len(seeds_used), seeds=seeds_used,
                 delta_mean=float(d.mean()), delta_sd=float(d.std(ddof=1)),
                 delta_by_seed=[float(x) for x in d],
-                se_components=comp,
+                se_components=comp, boot_estimator=boot_fn.__name__,
                 boot_mean=m, boot_se=sd, boot_ci=[lo, hi],
                 f1={f"{a}_{s}": float(f1[(a, s)]) for a in ARMS
                     for s in seeds_used})
@@ -355,6 +466,12 @@ def main():
     ap.add_argument("--allow-partial", action="store_true",
                     help="允许残缺输入 (默认禁止)。产物会记 partial=true "
                          "且 seeds 只列实际用上的 —— 引用时必须注明。")
+    ap.add_argument("--matched-truncate", action="store_true",
+                    help="同仪器读数改成: 抽稀后截断到每会话同样块数, 沿用原版 boot()。"
+                         "只作稳健性对照 (它同时改了估计量和数据)。")
+    ap.add_argument("--skip-matched", action="store_true",
+                    help="只算主读数并落盘, 跳过同仪器读数。"
+                         "用于主读数已被同仪器段的异常带走过一次之后 (2026-09-23)。")
     args = ap.parse_args()
 
     if args.set == "union":
@@ -381,6 +498,18 @@ def main():
         return
     res["main"] = r
 
+    # 🔴 2026-09-23: 主读数**先落盘, 再算同仪器读数**。
+    # 第一次跑 `--set c` 时, 同仪器那段(抽稀 ⇒ 会话内块数不等 ⇒ boot 的 S*C 断言)
+    # 抛了异常, 把**已经算好的主读数一起带走** —— 日志里有数、产物里没有。
+    # 主读数是判据, 同仪器只是机制解释: 绝不能让后者把前者拖没。
+    out = f"{ANNOT}/g1_c_analyze_{args.set}.json"
+    json.dump(res, open(out, "w"), indent=1, ensure_ascii=False)
+    print(f"\n-> {out}   (主读数已落盘; 同仪器读数随后追加)")
+
+    if args.skip_matched:
+        print("   --skip-matched: 跳过同仪器读数。")
+        return
+
     # ---- 同仪器读数: 把流行率对齐到 e4c (§4.2; 方法见 §6.1) ----
     d, f1, cids, _ = delta_by_seed(data)
     cur = sum(data[("own10", "42")][c]["n_gt"] for c in cids) / len(cids)
@@ -393,26 +522,41 @@ def main():
         sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
         print(f"    本集不稠于目标 ⇒ 不抽稀 ({len(cids)} 块, {got:.4%}); "
               f"这就是它自己 (自洽性检查)")
-        res["matched"] = report(f"{args.set} (matched)", sub, args.boot)
+        # 同仪器读数两集必须同一个估计量, 否则 C 与 e4c 的 matched 不可比。
+        res["matched"] = report(f"{args.set} (matched)", sub, args.boot,
+                                boot_fn=boot_clustered)
     else:
         # 本集更稠 (C: 8.65% vs 3.94%) ⇒ 按 §6.1 抽稀事件块。
         # 抽稀是**随机**的 ⇒ 跑 R 次, 报跨次均值与 SD。单次结果不许引用。
         R = args.match_draws
         deltas, ses, prevs, ns = [], [], [], []
+        # 🔴 抽稀按块丢 ⇒ 会话参差 (min 39/max 48) ⇒ **预登记的 boot() 直接抛断言**,
+        #    而且它是在 json.dump **之前**抛的, 会把已经算好的主读数一起带走。
+        #    默认走 boot_clustered(); --matched-truncate 则截断成方形 + 沿用原版 boot,
+        #    作为「估计量」与「数据」同时被改的稳健性对照 (两者之差不能单独归给一方)。
+        boot_fn = boot if args.matched_truncate else boot_clustered
+        if args.matched_truncate:
+            print("    ⚠️ --matched-truncate: 每次抽稀后截断到每会话同样块数, "
+                  "沿用原版 boot()。它在同时改「估计量」和「数据」, 只作对照。")
         for r in range(R):
             keep, got, n = thin_to_prevalence(data, cids,
                                               args.match_prevalence, seed=r)
+            if args.matched_truncate:
+                keep = truncate_balanced(keep, seed=r)
+                got = sum(data[("own10", "42")][c]["n_gt"] for c in keep)
+                n = len(keep)
             sub = {k: {c: v[c] for c in keep} for k, v in data.items()}
             dd, _, cc, _ = delta_by_seed(sub)
             deltas.append(float(np.mean(dd)))
             prevs.append(got); ns.append(n)
             if r == 0:
                 res["matched_one_draw"] = report(
-                    f"{args.set} (matched, 第 1 次抽稀, 仅为留档)", sub, args.boot)
+                    f"{args.set} (matched, 第 1 次抽稀, 仅为留档)", sub, args.boot,
+                    boot_fn=boot_fn)
             if r < 20:
                 # bootstrap 只在前 20 次里跑: 要报的是 SE 的**典型值**, 不是逐次的。
                 # 200 次全跑 boot 要 ~1 h 纯 CPU, 换不来信息。
-                _, sd_r, _, _ = boot(sub, cc, B=args.boot)
+                _, sd_r, _, _ = boot_fn(sub, cc, B=args.boot)
                 ses.append(sd_r)
         deltas = np.array(deltas)
         print(f"\n  [同仪器] R={R} 次抽稀: 块数均值 {np.mean(ns):.0f}, "
@@ -422,6 +566,7 @@ def main():
               f"bootstrap SE 均值 {np.mean(ses):.4f} (前 {len(ses)} 次)")
         print(f"    ⚠️ 抽稀间 SD 是**抽稀这一操作本身**的随机, 单独报, 不并进 SE")
         res["matched"] = dict(
+            boot_estimator=boot_fn.__name__,
             n_draws=R, target=args.match_prevalence,
             n_chunks_mean=float(np.mean(ns)), prevalence_mean=float(np.mean(prevs)),
             delta_mean=float(deltas.mean()),
