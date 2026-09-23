@@ -180,6 +180,21 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 **不能说「造假」或「方法无效」** —— 只能说「那个指标不支持那个解读」。
 📎 同上 §2（论文原话）与 §5 ｜ §7 是**引用前必读**的结论边界
 
+**24. 〔新，2026-09-23 晚〕spoken 的 `meta.json` 里带着转写，与 corpus `dialogues` join 得通。**
+每个 `speech_meta` 与 corpus `history`：**长度恒等 917/917**、逐轮一致 **98.8%
+（17,778/17,986）**、逐条全对 **711/917**。
+残差是**完美分离**而非相关：**208 个不一致轮 208 个含 `[TAKE_FLOOR]`；
+17,778 个一致轮 0 个含**。
+🔑 机制：corpus 的 `content` 在 `[TAKE_FLOOR]`（对方抢走话轮处）**截断**，
+`speech_meta.tts_text` 保留原定后半句 ⇒ **该标记是轮换事件，不是脏数据**。
+🔑 附带：`turn_gap_sec` 在 5,875 个条目里**全 = 0.16**，独立佐证 §5.2d
+纯由样本算术推出的 0.16 s 接缝。
+⚠️ **`annotations` 仍然孤立**：首轮文本 ⊂ corpus **0/45**、⊂ spoken **0/45**，
+轮数 0/45 相同（ann 均值 12.4 vs spk 19.7）⇒ §3 的死结**只在标注那一层**，
+**不能**推广成「L1↔L3 全层不通」。
+📎 `2026-09-23_duplexgen_humdial_recon.md` §3.6 ｜ 脚本 `duplexgen_meta_join.py` /
+`duplexgen_three_source_join.py`
+
 ---
 
 ## 二、🔴 已证伪（不要再引用）
@@ -504,6 +519,38 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
     ⇒ 顺带一条纪律：**「20/20 无例外」这种一致性陈述，先问它有没有可能是同一个默认值**
     （§四.23）再当证据用。
 
+25. 🔴 **同一个容器里两个字段都读得像你要找的东西 —— 选错的那个会给出一个「像结果」的坏数。**
+    〔新，2026-09-23 晚，§3.6〕`duplexgen-spoken` 的每个 `meta.json` 里：
+
+    | 字段 | 长度 | 是什么 |
+    |---|---|---|
+    | `utterances` | = `num_turns`（首条 32） | 按**话轮**切 |
+    | `speech_meta` | 20 | 按**语段**切，与 corpus `history` 等长 |
+
+    拿 `speech_meta` 比 corpus：**98.6%**。拿 `utterances` 比：**13.8%**。
+
+    ⇒ 危险不在"错"，在于**它错得像个部分成功**：13.8% 不是 0，
+    读起来像「有一部分对得上」而不是「你选错了字段」。
+    与 §3.1 那个 **12.2%** 的「`word_index` 索引撞号」是**同一个形状** ——
+    一个 12–14%、看着像结果的数，其实是仪器用错了。
+    与 §四.23（打平的 `argmax` 读成具体类别）**同族**：都是
+    **代码替你在两个候选里选了一个，而返回值每一行都合法**。
+
+    ⇒ 我第一次做这个 join 正是拿 `utterances` 比的，得到「0/16 对不上」，
+    **差一点把 §3 那条错误结论又"独立复现"了一遍** ——
+    第二次"独立验证"如果用的是同一个错误的仪器，它只是把错误坐实。
+
+    ⇒ 纪律：**同一个文件里出现两个都像目标物的字段时，把两个都算出来并列打印**，
+    不要只报你选的那个（§3.6 的 K4 就是这条纪律的产物）。
+    与 §四.14（join 键命中 100% 而实体同一 0%）合起来是一条完整的 join 纪律：
+    **键要验实体同一，字段要验选了哪个。**
+
+    ⇒ **孪生面：过滤器会制造缺口。**同一次测量里我按 `variant=="var00"` 筛，
+    得到「只有 25/50 被标注 id 有 spoken」；按「任意变体」算是 **45/50**。
+    `work_0502` 之类**根本没有 var00**。缺口是我的筛选造出来的，
+    不是数据的 —— 与 `tiebreak-default-read-as-evidence` 里
+    「一致性可能是我的代码在替我选」是同一个问句的两头。
+
 ---
 
 ## 五、出处速查
@@ -518,7 +565,7 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 | [2026-09-17_q3_q4.md](2026-09-17_q3_q4.md) | Q3（`data_seed` 解耦）、Q4（loss 曲线） |
 | [2026-09-11_g1_observation_ablation.md](2026-09-11_g1_observation_ablation.md) | G1 观测空间消融**主报告**（头部有更正横幅） |
 | [2026-09-12_storyline_master.md](2026-09-12_storyline_master.md) | 早期 storyline，**已不反映当前结论**，仅存档 |
-| [2026-09-23_duplexgen_humdial_recon.md](2026-09-23_duplexgen_humdial_recon.md) | 对照语料勘察（DuplexGen / HumDial-FD 能不能做）。§3.5 是 join 陷阱，§5 是待办清单 |
+| [2026-09-23_duplexgen_humdial_recon.md](2026-09-23_duplexgen_humdial_recon.md) | 对照语料勘察（DuplexGen / HumDial-FD 能不能做）。§3.5 是 join 陷阱，**§3.6 打通 spoken↔corpus 并收窄 §3**，§5 是待办清单 |
 | [2026-09-23_duplexgen_annotation_reliability.md](2026-09-23_duplexgen_annotation_reliability.md) | 🔬 **DuplexGen 标注可靠性审计**（本审计只读 `annotations/`，**不做任何 join**）。§2 论文自己的说法 / §3 κ+AC1 / §4 槽级信号 / §5 常数基线 vs Table 6 / §7 结论边界（引用前必读） |
 
 ### 产物（都在 `pilot_study/real_data/results/annotator/`）
@@ -554,6 +601,8 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 | `duplexgen_overlap_robust.py` | §5.2c 事后稳健性：ρ=0.90 里有多少是「时长」（偏相关 + 归一 + 逐场景） |
 | `duplexgen_utterance_tiling.py` | §5.2d `utterances/` 是什么 —— **精确样本相等**定址（零相关零阈值） |
 | `duplexgen_utt_unlocated_probe.py` | §5.2d 的粒度诊断：整文件相等 vs 非零跨度相等 |
+| `duplexgen_meta_join.py` | §3.6 `meta.json.speech_meta` ↔ corpus `dialogues` 的 join（J1–J4；判据写在 docstring，跑之前） |
+| `duplexgen_three_source_join.py` | §3.6 三源对照 + 「拿错字段」陷阱量化（K1–K4）；**用 `metadata.jsonl` 定位 tar，不扫全库** |
 
 ### 产物（DuplexGen 审计，都在 `pilot_study/real_data/results/duplexgen_annot/`）
 

@@ -100,9 +100,17 @@ INT test 实测：50 条 / **1,016 个 boundary**，`total_count` 分布
 
 ---
 
-## 3. 🔴 本次勘察最重要的发现：L1↔L3 在已发布文件上 **join 不通**
+## 3. 🔴 勘察发现：**annotations 那一层** join 不通
 
 > ⚠️ **这一节是本次险些犯错的地方，必须留档。**
+>
+> **🔧 2026-09-23 晚 修正（详见 §3.6）**：本节原标题是「**L1↔L3 在已发布文件上
+> join 不通**」。补测之后判定这个说法**太宽**，收窄为：
+> **只有 `annotations` 那一层是孤立的**；
+> **corpus `dialogues` ↔ spoken `meta.json.speech_meta` 是 join 得通的**
+> （INT 917 条：长度恒等 **917/917**，逐轮一致 **98.8%**，残差 208/208 可解释）。
+> §3.1–3.5 关于 **annotations** 的实测**全部仍然成立**（它确实对 corpus、spoken
+> **都**对不上，0/45），但**不能**推广成「L1↔L3 全层不通」。
 
 ### 3.1 差点写出去的错误结论
 
@@ -160,6 +168,109 @@ DuplexGen 的核心主张是「**human calibration 才是场景化轮换行为�
 > 这与 `hardcoded-conclusions-escape-reproduction`（先填表后核数）、
 > `windowed-eval-check-gt-straddles-boundary`（诊断时打预测"时刻"而非计数）同族。
 > **防线**：join 完先打一条「逐字段是否真的相等」的自检，**并且让它会炸**。
+
+### 3.6 ✅ **打通了**：spoken 的 `meta.json` 里**就带着转写**（2026-09-23 晚）
+
+这一节回答 §5.4 第 3 问（原话：「查 `duplexgen-spoken` 的 `.tar` 里**是否含转写文本**
+（`n_files` 28 vs `n_utterances` 20 + 6 BC ⇒ 可能只有 wav）」）。**答案：含。**
+
+每个 `INT/work_XXXX/varYY/` 下有一个 **`meta.json`**，字段：
+
+```
+num_turns, speakers, utterances, utterances_with_bc, speech_meta,
+user_prompt_speaker_id, variant_idx, turn_gap_sec
+```
+
+#### ⚠️ 先记一个陷阱：同一个文件里**两个字段都读得像「这份对话的转写」**
+
+| 字段 | 长度 | 是什么 |
+|---|---|---|
+| `utterances` | = `num_turns`（首条 **32**） | 按**话轮**切，含 backchannel 等 |
+| `speech_meta` | = **20** | 按**语段**切，**与 corpus `history` 等长** |
+
+**拿错一个，就会得到一个像模像样的失败率。**实测（INT，885 轮配对）：
+
+| 拿哪个字段去比 corpus | 一致率 |
+|---|---|
+| `speech_meta` | **873/885 = 98.6%** ← 真转写 |
+| `utterances` | **122/885 = 13.8%** ← 拿错字段 |
+
+13.8% 这个数**不是 0**，所以它**看起来像「部分对得上」而不是「选错了」** ——
+与 §3.1 那个 12.2% 的「索引撞号」是同一个形状：
+**一个 12–14% 的、看着像结果的数，其实是仪器用错了。**
+
+> 我第一次做这个 join 就是拿 `utterances` 比的，得到「0/16 对不上」，
+> **差一点把 §3 的错误结论又独立地"复现"了一遍**。
+> 这正是 `tiebreak-default-read-as-evidence` 的同族：
+> **同一个容器里两个候选字段**，选错的那个会给出一个自洽的坏结果。
+
+#### 判据与结果（判据写于跑之前，`duplexgen_meta_join.py` 的 docstring）
+
+| 判据 | 结果 |
+|---|---|
+| **J1** 长度恒等 `len(speech_meta) == len(corpus.history)` | ✅ **0 条失败 / 917 条** |
+| **J2** 归一化后逐轮一致率 ≥ 95% | ✅ **17,778/17,986 = 98.8%** |
+| **J3** 逐条全对的对话占比 ≥ 50% | ✅ **711/917 = 77.5%** |
+| **J4** 残差可解释（不一致轮含 `[TAKE_FLOOR]` 的比例高于一致轮） | ✅ **完美分离** |
+
+**J4 是完美分离，不是相关**：
+
+| | 含 `[TAKE_FLOOR]` | 不含 |
+|---|---|---|
+| **不一致轮** | **208** | **0** |
+| **一致轮** | **0** | **17,778** |
+
+⇒ 残差**不是噪声，是一条确定性规则**：**208 个不一致轮，无一例外**都是
+corpus 侧带 `[TAKE_FLOOR]` 的轮。全库 INT 共 228 个该标记（另 3 个 `[REDACTED]`）。
+
+**机制**：corpus 的 `content` 在 `[TAKE_FLOOR]` 处**截断**，而 `speech_meta.tts_text`
+**继续写下去**。例：
+
+```
+INT/work_0023 @3   共同前缀 467 字
+  corpus: ...the letter and the synopsis so that s where i m looking for help
+  speech: ...ter and the synopsis so that s where i m looking for help oh
+```
+
+`[TAKE_FLOOR]` 正是「**对方在这个点抢走了话轮**」的标记 ——
+**corpus 只录到被打断处，spoken 保留了原定的后半句**。
+这条标记本身就是本项目关心的轮换事件，**不是脏数据**。
+
+#### 顺带：`turn_gap_sec` 独立佐证了 §5.2d
+
+`meta.json` 的 `turn_gap_sec` 在 **5,875 个条目里取值全是 `0.16`**。
+§5.2d 那个 0.16 s 接缝是**纯从音频样本算术**（长度差恒为 3,840 样本 @ 24 kHz）推出来的，
+两条路**互相独立**地落到同一个数上。**这是本次勘察里最干净的一次交叉验证。**
+
+#### 那 `annotations` 呢？——它**对谁**都对不上
+
+| 检查 | 结果 |
+|---|---|
+| 被标注 id 有**任意** spoken 变体 | **45/50** |
+| `annotations` 首轮文本 ⊂ corpus 全文 | ❌ **0/45 = 0.0%** |
+| `annotations` 首轮文本 ⊂ spoken 全文 | ❌ **0/45 = 0.0%** |
+| 轮数相同 | ❌ **0/45**（ann 9–21，均值 **12.4**；spk 13–20，均值 **19.7**）|
+
+⇒ **`annotations` 是一个孤立的层**：它既不是 `dialogues` 的改写，也不是 spoken 的改写，
+而是**另一段对话**（挂着同一个 `example_id`）。§3.3 的推测因此**得到支持**：
+标注做在某个**未发布的中间产物**上，而 `dialogues` / `speech_meta` 是最终合成版。
+
+#### ⚠️ 还有一个坑：`var00` 不是每个 work 都有
+
+我第一版按 `variant=="var00"` 筛，得到「只有 **25/50** 有 spoken」——
+**这个缺口是我自己的筛选造出来的**，不是数据的。按「任意变体」算是 **45/50**。
+（`work_0502` 就只有 `var01`/`var09` 没有 `var00`。）
+真实缺口只有 5 条：`work_0680, 0745, 0785, 0810, 0945` 完全无 spoken。
+
+> 与 `tiebreak-default-read-as-evidence` 同族：**先问「这个一致性/缺口是不是我的代码在替我选」**。
+
+#### 复现
+
+```bash
+P=/share/home/zhuangruicen/miniconda3/envs/fd_analysis/bin/python
+$P scripts/duplexgen_meta_join.py         --shards INT   # J1–J4
+$P scripts/duplexgen_three_source_join.py --shard  INT   # K1–K4（三源对照 + 陷阱量化）
+```
 
 ---
 
@@ -648,16 +759,21 @@ ch1 = **R** 那一路。对话里**没有一个样本**来自 utterances 之外�
 
 - 项目现成的 X2-Turn（帧级）+ SoulX（块级）概率融合管线跑 DuplexGen 音频 ⇒ L2
 - 之后可做 **L1/L2/L3 三源两两 κ**，与 Behavior-SD 那份「三源 κ 0.06–0.37」并排
-- ⚠️ **但 L2↔L3 的 join 同样受 §3 限制**（除非 §5.4 解决）；
-  **L1↔L2（都在 spoken 的 key 上）不受影响**，先做这条
+- ⚠️ **L2↔L3 仍然不通**：§3.6 已证明 `annotations` 对 corpus、spoken **都**对不上
+  （0/45），所以 L3 这一层还是孤立的。**L1↔L2（都在 spoken 的 key 上）不受影响**，先做这条
+- ✅ 但 §3.6 之后，**L2 有了文本**：`meta.json.speech_meta` 就是 spoken 的转写，
+  L1/L2/L3 **三源两两 κ 里的 L1↔L2 可以带文本做**，不必只靠计数
 
 ### 5.4 🔴 需要先核实（阻塞 L1↔L3，但 **不阻塞 5.1/5.2**）
 
 1. 拉 `github.com/duplexgen/duplexgen-code`，找**候选槽定位的中间产物**是否落盘
 2. 查 HF `DuplexGen/duplexgen-corpus` 的**别的 revision / 别的 config** 有没有那份文本
-3. 查 `duplexgen-spoken` 的 `.tar` 里**是否含转写文本**（`n_files` 28 vs `n_utterances` 20 + 6 BC ⇒ 可能只有 wav）
+3. ~~查 `duplexgen-spoken` 的 `.tar` 里是否含转写文本~~
+   → ✅ **已答（§3.6）**：**含**。`meta.json.speech_meta` 与 corpus `history`
+   长度恒等 917/917、逐轮一致 98.8%。**注意别拿 `utterances` 那个字段**（只有 13.8%）
 4. 都不行 ⇒ **问作者**
 5. 仍然不行 ⇒ 退路是**只在 spoken 侧**做（L1 的 `n_backchannels` ↔ L2 声学），放弃 L1↔L3
+   → 现在退路的**必要性下降**：L1/L2 可以带着文本做，只有 **L3** 需要放弃
 
 ### 5.5 HumDial-FDBench
 
@@ -690,6 +806,11 @@ $P duplexgen_overlap_robust.py --in ../real_data/results/duplexgen_annot/corpus_
 # §5.2d utterances 是什么（精确样本相等，零相关零阈值）
 $P duplexgen_utterance_tiling.py --per-scenario 4 --out ../real_data/results/duplexgen_annot/utterance_tiling.json
 $P duplexgen_utt_unlocated_probe.py --per-scenario 2 --scenarios INT,PLN   # T1 为何失败：粒度诊断
+
+# §3.6 三大问题（都纯读盘，用 tarfile 随机读，**不落盘解压**）
+$P duplexgen_meta_join.py         --shards INT   # ① J1–J4：spoken meta ↔ corpus dialogues 通不通
+$P duplexgen_three_source_join.py --shard  INT   # ② K1–K4：三源对照 + 「拿错字段」陷阱量化
+# 两脚本都在 srun 里跑，INT 全库（295 G）约 6 min；单看某几条对话会快得多
 
 # 六条对话的 (member, tar) 由每场景第一条的 metadata 决定：
 $P - <<'PY'
