@@ -152,6 +152,14 @@ README 描述的流水线是「文本对话 → **转成口语风格转写** →
 
 **⇒ 但这是推测，不能写进结论。** 待核实（§5.4）。
 
+> **🔧 2026-09-23 晚：这个推测现在有了实质支撑（见 §3.7）。**
+> 机制已定位到具体阶段：`duplexgen-code` 的 **stage 1（spoken-style conversion）**
+> 由 LLM 把上游书面文本改写成口语转写，**stage 3 的预测器是在人工标注上训的**。
+> 标注所用的那份改写文本在**上游原文 / 发布的 `dialogues` / spoken 转写**
+> 三处都找不到（INT 全 70 条，**0/70**），而 `dialogues` 与上游的血统是坐实的
+> （首轮 ⊂ 上游 **936/1000 = 93.6%**）⇒ **两份都是改写，但不是同一次生成。**
+> ⚠️ 表述仍受 §3.4 纪律约束：**只说已发布文件之间的关系，不外推到动机。**
+
 ### 3.4 为什么这条本身就有价值
 
 DuplexGen 的核心主张是「**human calibration 才是场景化轮换行为的来源**」。
@@ -270,6 +278,127 @@ INT/work_0023 @3   共同前缀 467 字
 P=/share/home/zhuangruicen/miniconda3/envs/fd_analysis/bin/python
 $P scripts/duplexgen_meta_join.py         --shards INT   # J1–J4
 $P scripts/duplexgen_three_source_join.py --shard  INT   # K1–K4（三源对照 + 陷阱量化）
+```
+
+### 3.7 🔴 再往里一层：`annotations` 的文本**不是** `dialogues` 的文本 —— 而文档说它们是同一个
+
+（2026-09-23 晚。用 `duplexgen-code`（GitHub）与上游 `Anthropic/AnthropicInterviewer`
+（HF）交叉核对。脚本 `duplexgen_annotation_provenance.py`，判据写于跑之前。）
+
+#### 文档是怎么说的
+
+`duplexgen-code/docs/CORPUS.md` 有一张对照表，原文：
+
+| | `dialogues/` | `annotations/` |
+|---|---|---|
+| Contains | DuplexGen-generated dialogue text + per-word turn-taking decisions | **the same dialogues**, plus human rater votes at annotated word boundaries |
+
+同页还写：「Stage 3 evaluates on `test` by default」，而 stage 3 是**拿标注训预测器**的。
+
+#### 实测是怎么说的
+
+全 **6 场景 × 两个 split**（`--scenarios` 默认全跑）：
+
+| 场景 | split | 条数 | 有对应 dlg | **逐条全同** | 轮数相同 | 首轮相同 |
+|---|---|---|---|---|---|---|
+| TEA | train | 20 | 2 | **0** | 0 | 0 |
+| TEA | test | 50 | 0 | — | — | — |
+| PLN | train | 20 | 5 | **0** | 1 | 0 |
+| INT | train | 20 | 20 | **0** | 0 | 0 |
+| INT | test | 50 | 50 | **0** | 0 | 0 |
+| NEG | train | 20 | 3 | **0** | 0 | 0 |
+| PER | train | 20 | 0 | — | — | — |
+| SOC | train | 20 | 19 | **0** | 2 | 0 |
+| （各场景 test） | test | 50×6 | 0 | — | — | — |
+| **合计** | | | **99** | **0** | **3（3.0%）** | **0** |
+
+**能配上对的 99 条里，逐条全同 0 条、首轮相同 0 条、轮数相同 3 条。**
+
+> ⚠️ **判据留档**：我把 P2 写成「轮数相同率 > 0」，于是 3/99 **字面通过**了。
+> 这条判据**写的时候就没有分辨力** —— 两条无关对话轮数相同的概率本来就不是 0
+> （都集中在十几到二十轮）。**3% 不足以支撑「同一份对话」。**
+> 保留原文不改，是因为这条教训比那个数重要：
+> **判据要在写下的时候就问「零模型下这个量是多少」**（同族：`threshold-must-match-null-model`）。
+
+#### 为什么多数 test 标注「没有对应 dialogue」——那是**设计**，不是缺口
+
+`docs/CORPUS.md` 明说 **「`dialogues/` ships train only」**。
+实测也对得上：各场景 `annotations/*/test.jsonl` 的 id 用的就是**上游 test split 的 id**
+（`GSM8K_test_…`、`soda_test_…`、`MUL0089`…），而 `dialogues/` 里只有 train 的 id。
+**这一条不是问题，别拿它当证据。**
+
+#### 那标注的文本到底取自哪一份？—— 盘上四份文本，逐一对过
+
+| # | 文本 | 出处 |
+|---|---|---|
+| ① | 上游原始对话 | HF `Anthropic/AnthropicInterviewer`（INT = workforce，1,000 条）|
+| ② | 发布的生成对话 | `duplexgen-corpus/dialogues/INT/train.jsonl` |
+| ③ | ②的音频转写 | `duplexgen-spoken` 各变体的 `meta.json.speech_meta`（§3.6）|
+| ④ | 人工标注所用文本 | `duplexgen-corpus/annotations/INT/{train,test}.jsonl` |
+
+INT 全 70 条标注的首轮文本，去 ①②③ 里找（归一化后取 40 字片段）：
+
+| 找哪里 | 命中 |
+|---|---|
+| ④ ⊂ ① 上游原文 | **0/70** |
+| ④ ⊂ ② corpus dialogues | **0/70** |
+| ④ ⊂ ③ **任意**变体 `speech_meta`（每 id ≤10 个变体，全试） | **0/70** |
+
+**⇒ ④ 是第四份文本。四份都在盘上，只有它没有发布。**
+
+#### 但 ④ 不是凭空来的 —— 先把血统坐实（否则「找不到」可能是我方法不行）
+
+**对照 P4**：② 的首轮 ⊂ ① 上游原文 = **936/1000 = 93.6%**。
+（例：上游 `work_0000` = 「Assistant: Hi there! I'm Claude from Anthropic's research team.
+Thank you so much for taking the time to speak with me today.」；
+② 的 `work_0000` = 「hi there i m claude from anthropic s research team thanks for taking the time…」。）
+
+⇒ **② 确实是从 ① 改写来的**，方法本身能找到东西。所以 ④ 的 0/70 **不是方法问题**。
+
+#### 流水线解释了第四份文本可以出现在哪里
+
+`duplexgen-code/README.md` 的五阶段：
+
+| 阶段 | 做什么 |
+|---|---|
+| 1. Spoken-style conversion | 把六个上游数据集的**书面文本改写成口语风格转写**（LLM：Qwen3.5-122B-A10B）|
+| 2. Slot identification | 启发式 + LLM 定候选轮换点 |
+| 3. Turn-taking prediction | **在标注上**训预测器 |
+| 4. Turn-taking dialogue generation | 逐槽查询、插入行为、过滤角色混淆的输出 |
+| 5. TTS rendering | Chatterbox 渲成双声道 |
+
+④ 的文本读起来正是**一次 stage-1 改写**（「hey thanks for chatting with me today we re
+looking to learn how folks are using ai like me…」），而 ② 是**另一次** stage-1 改写
+（「hi there i m claude from anthropic s research team…」）。
+**两次都是同一场上游访谈的口语化，但不是同一次生成。**
+
+#### 边界（引用前必读）
+
+- ✅ **可以说的**：「**已发布的** `dialogues/` 与 `annotations/` 在文本层对不上
+  （0/99），且标注文本在上游原文、发布对话、spoken 转写**三处都找不到**（0/70）；
+  但 `dialogues` 与上游的血统是坐实的（936/1000）。」
+- ⚠️ **不可以说的**：不能说「标注是假的 / 数据有缺陷 / 造假」。
+  我们的检索范围是 **HF 全部 config 与 revision**（实测只有 `main` 一个分支、
+  只有 `annotations/` + `dialogues/` 两个目录、该 author 下无模型）、
+  **GitHub 的两个仓库**（`duplexgen-code` 只有代码，`personaplex-finetune` 未含
+  checkpoint）。**这份文本很可能只是没随发布一起放出来**，
+  也可能在论文附录、作者手上、或别的未公开产物里。
+- ⚠️ 与 §3.4 同一条表述纪律：**只说已发布文件之间的关系，不外推到动机**。
+- 🔑 **对本项目的意义**：stage 3 的预测器是**在 ④ 上训的**，而 ④ 与发布给第三方的
+  ② 不是同一份文本 ⇒ **第三方无法复核这个校准**。这与本项目的主命题
+  （**标签的来源不可追溯**）**同源**，而且是它的一个干净实例。
+
+#### 复现
+
+```bash
+# 上游（缺了脚本会**明确跳过** ① 与 P4，不会静默通过）
+curl -L -H "Authorization: Bearer $HF_TOKEN" \
+  https://huggingface.co/datasets/Anthropic/AnthropicInterviewer/resolve/main/interview_transcripts/workforce_transcripts.csv \
+  -o temp/upstream/workforce_transcripts.csv      # temp/ 已 gitignore
+# 代码仓（只有代码，6.3 M）
+git clone --depth 1 https://github.com/duplexgen/duplexgen-code.git temp/duplexgen-code
+P=/share/home/zhuangruicen/miniconda3/envs/fd_analysis/bin/python
+$P scripts/duplexgen_annotation_provenance.py            # A: 6 场景 × 2 split；B: P3/P4
 ```
 
 ---
@@ -766,8 +895,16 @@ ch1 = **R** 那一路。对话里**没有一个样本**来自 utterances 之外�
 
 ### 5.4 🔴 需要先核实（阻塞 L1↔L3，但 **不阻塞 5.1/5.2**）
 
-1. 拉 `github.com/duplexgen/duplexgen-code`，找**候选槽定位的中间产物**是否落盘
-2. 查 HF `DuplexGen/duplexgen-corpus` 的**别的 revision / 别的 config** 有没有那份文本
+1. ~~拉 `github.com/duplexgen/duplexgen-code`，找**候选槽定位的中间产物**是否落盘~~
+   → ✅ **已查（§3.7）**：仓库**存在**且有完整五阶段文档（stage1-speechify …
+   stage5-tts），但**只有代码（6.3 M / 131 文件），不含任何数据产物**。
+   其 `docs/CORPUS.md` 反而声称 annotations 就是「the same dialogues + votes」，
+   **而实测 0/99**。
+2. ~~查 HF `DuplexGen/duplexgen-corpus` 的**别的 revision / 别的 config** 有没有那份文本~~
+   → ✅ **已查（§3.7）**：该数据集**只有 `main` 一个分支**（另有 HF 自动转的
+   `refs/convert/parquet`），目录只有 `annotations/` + `dialogues/`；
+   `duplexgen-spoken` 只有 `shards/` + `metadata.jsonl`；
+   **`DuplexGen` 名下没有 model**。⇒ **那份文本不在 HF 上。**
 3. ~~查 `duplexgen-spoken` 的 `.tar` 里是否含转写文本~~
    → ✅ **已答（§3.6）**：**含**。`meta.json.speech_meta` 与 corpus `history`
    长度恒等 917/917、逐轮一致 98.8%。**注意别拿 `utterances` 那个字段**（只有 13.8%）
@@ -812,6 +949,10 @@ $P duplexgen_meta_join.py         --shards INT   # ① J1–J4：spoken meta ↔
 $P duplexgen_three_source_join.py --shard  INT   # ② K1–K4：三源对照 + 「拿错字段」陷阱量化
 # 两脚本都在 srun 里跑，INT 全库（295 G）约 6 min；单看某几条对话会快得多
 
+# §3.7 标注文本的来源归属（6 场景 × 两 split + 上游血统对照）
+#   需先下上游 CSV 与代码仓，见 §3.7 末尾；缺上游时 ① 与 P4 会**明确跳过**
+$P duplexgen_annotation_provenance.py
+
 # 六条对话的 (member, tar) 由每场景第一条的 metadata 决定：
 $P - <<'PY'
 import json
@@ -851,6 +992,8 @@ PY
 ## 7. 与总索引的关系
 
 - 本文只做**勘察与可行性**，**不产生任何实验结论**。
-- §3 的教训（join 键命中 ≠ 实体同一）**待进 `2026-09-22_claims_ledger.md` 的「方法论教训」**。
+- §3 的教训（join 键命中 ≠ 实体同一）**已进** `2026-09-22_claims_ledger.md` §四.14；
+  §3.6 的「两个字段都像目标物」+「过滤器造缺口」→ §四.25；
+  §3.6/§3.7 的两条实测结论 → §一.E.24 / §一.E.25。
 - 5.1 / 5.2 出结果后另开文档；索引登记在 `syllabus.md`。
 - 上游动机：上个月周报的「下一步」（见 `2026-09-22_pilot_study_overview.md` §6 的对外叙事）。

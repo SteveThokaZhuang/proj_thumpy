@@ -195,6 +195,23 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 📎 `2026-09-23_duplexgen_humdial_recon.md` §3.6 ｜ 脚本 `duplexgen_meta_join.py` /
 `duplexgen_three_source_join.py`
 
+**25. 〔新，2026-09-23 晚〕`annotations` 用的是一份**第四份**文本，而文档说它就是 `dialogues`。**
+`duplexgen-code/docs/CORPUS.md` 原话：annotations = **"the same dialogues, plus human
+rater votes at annotated word boundaries"**。
+实测（6 场景 × 两 split，**99 条能配上对的**）：逐条全同 **0**、首轮相同 **0**、
+轮数相同 **3（3.0%）**。
+标注文本在盘上**另外三份**里都找不到（INT 全 70 条）：
+⊂ 上游原文 **0/70**、⊂ `dialogues` **0/70**、⊂ **任意** spoken 变体 `speech_meta` **0/70**。
+**血统对照**：`dialogues` 首轮 ⊂ 上游 `AnthropicInterviewer` workforce = **936/1000 = 93.6%**
+⇒ ② 确实源自 ①，**所以 0/70 不是方法问题**。
+🔑 机制：`duplexgen-code` 五阶段里，**stage 1（LLM 口语化改写）**跑过不止一次，
+**stage 3 的预测器是在标注（④）上训的**，而发布给第三方的是**另一次** stage-1 的产物（②）。
+🔑 **对本项目的意义**：这与主命题（**标签来源不可追溯**）同源，且是一个干净实例。
+⚠️ **表述纪律**：只能说「**已发布的这两份**在文本层对不上，且标注文本在 ①②③ 三处都找不到」；
+**不能说**「造假 / 数据缺陷」。检索范围：HF 全部 config 与 revision（只有 `main`）、
+GitHub 两个仓库（只有代码，无数据）。**那份文本很可能只是没随发布放出来。**
+📎 `2026-09-23_duplexgen_humdial_recon.md` §3.7 ｜ 脚本 `duplexgen_annotation_provenance.py`
+
 ---
 
 ## 二、🔴 已证伪（不要再引用）
@@ -565,7 +582,7 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 | [2026-09-17_q3_q4.md](2026-09-17_q3_q4.md) | Q3（`data_seed` 解耦）、Q4（loss 曲线） |
 | [2026-09-11_g1_observation_ablation.md](2026-09-11_g1_observation_ablation.md) | G1 观测空间消融**主报告**（头部有更正横幅） |
 | [2026-09-12_storyline_master.md](2026-09-12_storyline_master.md) | 早期 storyline，**已不反映当前结论**，仅存档 |
-| [2026-09-23_duplexgen_humdial_recon.md](2026-09-23_duplexgen_humdial_recon.md) | 对照语料勘察（DuplexGen / HumDial-FD 能不能做）。§3.5 是 join 陷阱，**§3.6 打通 spoken↔corpus 并收窄 §3**，§5 是待办清单 |
+| [2026-09-23_duplexgen_humdial_recon.md](2026-09-23_duplexgen_humdial_recon.md) | 对照语料勘察（DuplexGen / HumDial-FD 能不能做）。§3.5 是 join 陷阱，**§3.6 打通 spoken↔corpus 并收窄 §3**，**§3.7 证明标注文本是「第四份」**，§5 是待办清单 |
 | [2026-09-23_duplexgen_annotation_reliability.md](2026-09-23_duplexgen_annotation_reliability.md) | 🔬 **DuplexGen 标注可靠性审计**（本审计只读 `annotations/`，**不做任何 join**）。§2 论文自己的说法 / §3 κ+AC1 / §4 槽级信号 / §5 常数基线 vs Table 6 / §7 结论边界（引用前必读） |
 
 ### 产物（都在 `pilot_study/real_data/results/annotator/`）
@@ -603,6 +620,7 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 | `duplexgen_utt_unlocated_probe.py` | §5.2d 的粒度诊断：整文件相等 vs 非零跨度相等 |
 | `duplexgen_meta_join.py` | §3.6 `meta.json.speech_meta` ↔ corpus `dialogues` 的 join（J1–J4；判据写在 docstring，跑之前） |
 | `duplexgen_three_source_join.py` | §3.6 三源对照 + 「拿错字段」陷阱量化（K1–K4）；**用 `metadata.jsonl` 定位 tar，不扫全库** |
+| `duplexgen_annotation_provenance.py` | §3.7 标注文本的来源归属（P1–P4，6 场景 × 两 split + 上游血统对照）；**缺上游文件时明确跳过，不静默通过** |
 
 ### 产物（DuplexGen 审计，都在 `pilot_study/real_data/results/duplexgen_annot/`）
 
