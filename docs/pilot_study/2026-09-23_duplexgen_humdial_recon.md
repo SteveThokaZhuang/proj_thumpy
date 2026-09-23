@@ -288,8 +288,7 @@ tar 内布局 (例 INT/work_0000/var00/):
 
 ⚠️ 下面这段的**论证**已作废，仅留作记录：
 
-`utterances/NN.wav` 的声道占用~~是**严格交替**的（`0=L, 1=R, 2=L, 3=R, …`，20/20 无例外），
-而**带 backchannel 的 utterance 全是奇数 = 全是 R**~~。backchannel 又全 pan 到 L。
+~~`utterances/NN.wav` 的声道占用是**严格交替**的（`0=L, 1=R, 2=L, 3=R, …`，20/20 无例外），而**带 backchannel 的 utterance 全是奇数 = 全是 R**~~。backchannel 又全 pan 到 L。
 ⇒ **L 恒为"边听边给反馈"的一方，backchannel 永远在 R 说话时由 L 发出** ——
 这在语义上**完全正确**，是设计使然，不是硬编码伪影。
 （R 话语里那 2–9% 的 L 残留能量，正是 backchannel 本身。）
