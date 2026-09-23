@@ -551,6 +551,7 @@ take_floor 全量 **p = 0.0010**（6 场景里 5 个 p≤0.013）。
 | `duplexgen_overlap_probe.py` | ⚠️ 用 Otsu 阈值量重叠 —— **已证伪的仪器**，留作 §四.21 的反面教材 |
 | `duplexgen_overlap_exact.py` | ✅ 用**精确数字零**量重叠（无参数），并与 BC 窗口求交 |
 | `duplexgen_corpus_overlap.py` | §5.2c 全库 base rate（1,941 条，零参数仪器） |
+| `duplexgen_overlap_robust.py` | §5.2c 事后稳健性：ρ=0.90 里有多少是「时长」（偏相关 + 归一 + 逐场景） |
 | `duplexgen_utterance_tiling.py` | §5.2d `utterances/` 是什么 —— **精确样本相等**定址（零相关零阈值） |
 | `duplexgen_utt_unlocated_probe.py` | §5.2d 的粒度诊断：整文件相等 vs 非零跨度相等 |
 

@@ -684,6 +684,9 @@ $P duplexgen_overlap_probe.py --tar $D/shards/INT/INT-00000.tar --member INT/wor
 $P duplexgen_bc_timing.py     --tar $D/shards/INT/INT-00000.tar --member INT/work_0000/var00  # ② 分位数
 $P duplexgen_overlap_exact.py --tar $D/shards/INT/INT-00000.tar --member INT/work_0000/var00  # ③ 精确零
 
+# §5.2c 事后稳健性：ρ=0.90 里有多少是「时长」（纯读盘，读 corpus_overlap.json）
+$P duplexgen_overlap_robust.py --in ../real_data/results/duplexgen_annot/corpus_overlap.json
+
 # §5.2d utterances 是什么（精确样本相等，零相关零阈值）
 $P duplexgen_utterance_tiling.py --per-scenario 4 --out ../real_data/results/duplexgen_annot/utterance_tiling.json
 $P duplexgen_utt_unlocated_probe.py --per-scenario 2 --scenarios INT,PLN   # T1 为何失败：粒度诊断
