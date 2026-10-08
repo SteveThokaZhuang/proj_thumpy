@@ -390,8 +390,6 @@ AS=Active Silence, PI=Proactive Initiation, AB=Agent Backchannel。
 
 ---
 
-<!-- §2–§4 随取证结果补入 -->
-
 ## 2. 语料 / 标注体系类
 
 ### 2.1 CANDOR（Science Advances 2023）★ 本项目主力语料
@@ -1194,6 +1192,287 @@ HumDial 的 user backchannel（只有一句语义）、CANDOR 的 interruption�
 - [x] `2026-08-26_ari_qwen_advice_1.md` 风险表下方加更正注：「FD-Bench 代码不开源」不成立
   （本地 `third_party/FD-Bench/` 有完整 `benchmarking.py`），原建议表保持原样不动
 
+## 8. 专题：全双工行为的定义该更「语义」吗？
+
+> **由来**（2026-10-08，用户提出）：「我感觉全双工行为是不是大家习惯用**声学信息**来界定了，
+> 但根据**我的实验**这个定义应该更**语义**一点。」本节：§8.1 校准前提（用本汇编 §6 的实测，不用印象）；
+> §8.2 文献支持度（专门检索）；§8.3 Claude 的评估与可操作建议。
+>
+> **约定**：为精确起见，本节把「声学」推广为**形式（form）**——含**声学时序**（时长/重叠/VAD）
+> 与**词汇形式**（词表/词数）两类，二者都是"从可观测表面定类"；与之相对的是**功能（function）**——
+> 意图 / uptake（对方如何接） / 语义角色。
+> **用户实验的所指**（本汇编内部出处）：F3 的 47 条自由描述撑破三分类（`grade` 6 值 + `flags` 3 个，
+> 其中 **NONOVER 6/47≈13%** 是无 overlap 的 bc、`INTENT` 是意图≠效果，见 §5.5）；
+> 同一个 `yeah` 两种功能（clip_052 vs clip_049）；ARI 实验里人类标签在五个声学特征上
+> **ARI≈0.058**（近随机）而合成标签 0.309 靠 silence shortcut（`docs/paper/full_duplex_label_audit_icassp.md` §3.1）。
+
+### 8.1 前提校准：文献实际用什么定义？（本汇编实测，不用印象）
+
+把本汇编里**所有给出 bc 事件判据**（或明说无判据）的体系按路线归类：
+
+| 路线 | 体系 | 计数 |
+|---|---|---|
+| **形式-声学时序** | FDB v1（<1s 且 <2 词）、HiPLEX（≤1s）、VAP（≤1s+邻域静默）、BC-head（帧级 onset+τ）、**本项目 L2**（overlap 100–500ms） | 5 |
+| **形式-词汇** | CANDOR（Backbiter 三规则）、DuplexGen 生成侧（10 词）、WildTurn（66 词）、FDB v1.5（99 条合成列表）、Instruct-FD judge（<4 词）、**本项目 CANDOR 采样**（ConvoKit 字段派生） | 6 |
+| **功能/语义（人标）** | TurnBench（"regardless of duration"）、Duplex Cue、**TACT**（bck 意图）、Uro、Lebourdais、Paierl、Cathcart（功能定义+词表过滤，混合） | 7 |
+| 序列结构（既非声学也非语义） | Liesenfeld & Dingemanse（form-agnostic） | 1 |
+| **无判据**（类别名/语义描述，操作化外包） | SoulX-Duplug、X2-Turn（LLM 语义标注、判据不公开）、Freeze-Omni、dGSLM（提出又拒绝）、HumDial（一句语义描述，无操作化） | 5 |
+
+**读表三条结论**：
+
+1. **「形式」合计 11 个 vs「功能」7 个 —— 用户的方向判断成立，但有一处要修正**：
+   ① 词表（6）与时长（5）**几乎各占一半**，所以更准确的叫法是「**形式**」而不是「声学」——
+   词汇形式同样是表面特征，且**词表本质上是把"功能"外包给了一个词形假设**（"mhm 一定不是夺话"）。
+   ② 「无判据」那 4 个是**隐性形式**：X2-Turn / SoulX 名义上让 LLM"按语义"标，但判据不公开、
+   不可审计 —— 它到底是语义还是隐式的表面启发式，**文献层面不可知**。
+2. **语义已经进场，但进的是另一个位置**：FDB v1.5 / HumDial / FDB v2 / DuplexAct 都用了语义判官
+   （GPT-4o / DeepSeek-V3）——但判的是「**系统响应**」对不对，不是「**事件**是什么」。
+   ⇒ 准确的说法是：**大家愿意用语义判断"做得好不好"，却不愿用语义定义"这是什么"**。
+3. **功能式定义不是没人做，它的分布很有规律**：7 个功能式全部落在**对话分析传统**
+   （Cathcart / Uro / Lebourdais / TurnBench / Paierl）与 **2026 新工作**（TACT / Duplex Cue）里；
+   而**工程系统与 benchmark 侧**（FDB 家族、FD-Bench、LSLM、Freeze-Omni、Moshi、本项目 L2）
+   **近乎全是形式或无定义**（DuplexAct 的 bc 事件层是个例外：它用人标位置当 GT，但**没有公开的判据文字**）。
+   用户假设中"大家习惯用声学"在**工程/评测文献**里成立，
+   在**对话分析文献**里不成立 —— 这两个圈子此前基本不互引，本汇编第 §4.1 是它们第一次被并排放。
+
+### 8.2 文献支持度（专门检索，2026-10-08）
+
+> 检索口径：① 经典对话分析线（§8.2.0，9 查 5 中）；② 2024–2026 计算线（§8.2.1 支持 / §8.2.2 削弱）。
+> 全部条目抓取原文；14 篇 arXiv 编号经 API 反查标题核对，**无一编号幻觉**。
+> 关键句本地逐字回核：SID-Bench / ECHO / NaturalTurn / 2610.03078（其余为抓取原文，未逐句二次核对）。
+
+#### 8.2.0 经典线：对话分析与早期计算语言学（9 查 / 5 取得全文）
+
+> **取证**：PDF 全文抽取 + 关键句本地逐字回核（Schegloff / Goodwin / Jurafsky / Allwood 已核）。
+> **4 篇未取得**（closed access，均为付费墙）：Yngve 1970、Jefferson 1984、Drummond & Hopper 1993、
+> Bavelas et al. 2000。系统性障碍留档：**本机无法访问 archive.org**（v4/v6 连接被阻断）、
+> Cloudflare 系站点（academia.edu / CORE / T&F 等）一律 403 —— 后续补这三篇需机构订阅。
+
+- 🔴 **反直觉发现（先泼一盆冷水）**：**Yngve (1970)（术语"backchannel"的原始出处）不能当"功能优先"的源头引**。
+  原文未取得（CLS 会议论文集无公开全文），唯一可得的转引（Wikipedia，未核页码）显示其定义是**信道式**的：
+  "the person who has the turn receives **short messages** such as 'yes' and 'uh-huh' **without relinquishing the
+  turn'" —— "短"与社会信道隐喻本身就是形式式的。反而有二手源提到他讨论过"较长评论也可属 back channel"
+  （p.574 "back-back-channel"），若属实，说明**他自己也知道"短"这条形式判据不成立** —— 补核到原文前，两边都别引。
+
+- **① Schegloff (1982)——经典线最强正面引文**（*Discourse as an interactional achievement*, GURT 1981, pp.71–93）
+  - **功能式定义（p.81）**：
+    > "It takes the stance that the speaker of that extended unit **should continue talking** … 'Uh huh', etc.
+    > exhibit this understanding, and take this stance, **precisely by passing an opportunity to produce a full
+    > turn at talk**. When so used, utterances such as 'uh huh' may properly be termed '**continuers**'."
+    （定义落在"接受方**接下来做什么**"，不是时长/词表/重叠。）
+  - **明说聚合式/注意力式描述不足以定类（p.79）**：
+    > "the characterization of the class as signalling attention, interest, or understanding **appears
+    > equivocal**"；"**does not help discriminate** 'uh huh' from any other talk"
+  - **明说脱离序列环境就什么都看不出（p.86）**：
+    > "disengaging the listener behavior from its local sequential context **not only undercuts the possibility
+    > of understanding what it is doing**; it can remove an important basis for understanding what is going on
+    > in the discourse itself."（例子：同一个 'mm hmm' 可能同时在**扣住一个笑**）
+  - p.88："**It is not that there is a direct semantic convention in which 'uh huh' equals a claim or signal of
+    understanding.**"
+- **② Goodwin (1986)——"形式相似、功能不同"的直接论证**（*Between and within*, Human Studies 9:205–217）
+  > "Though assessments and continuers occur in roughly the same environment … **the detailed sequential
+  > treatment each receives reveals that they are in fact being treated as different types of phenomena**."（p.207）
+  > "**In this they resemble continuers**"（p.214，指两者都可短、可非词汇、可手势化）——
+  > 所以**不能靠形式区分**；区分靠说话人怎么对待它："she treats it **precisely as a signal to continue**"（p.209）。
+- **③ Jurafsky et al. (1998)——计算语言学侧的硬数据**（ACL/COLING Workshop, pp.114–120）
+  - **"yeah" 同时是四类 DA 各自的最常见词形**（Table 6：Agreements 36% / Continuers 27% / Incipient Speaker 59% / Yes-Answer 56%）
+  - **改标实验**：只看文本标注时，**38% 的改标是 continuer → agreement**（Table 7）——"词形/文本形式无法决定功能类别"的定量证据。
+  - 并**统计复现了 Jefferson (1984)**（Jefferson 原文未取得，此为转引）：
+    > "uh-huh is **twice as likely as yeah** to be used as a continuer, while yeah is **three times as likely as
+    > uh-huh** to be used to take the floor."
+- **④ Allwood, Nivre & Ahlsén (1992)——功能分类学的源头**（*Journal of Semantics* 9(1):1–26）
+  - 语言反馈 = 四类基本交际功能的信息交换：**contact / perception / understanding / attitudinal reactions**。
+  - 同一形式的极性翻转（Table 1）：对 "It isn't raining" 回 "yes"，**"ambiguous between rejection (yes it is)
+    and acceptance (yes you are right)"** —— 功能由前序话语决定。
+  - ⚠️ 作者自留件首页印 1993，**正确年份是 1992**（笔误）。
+- **⑤ Stolcke et al. (2000)——早期计算侧承认形式不够**（*Computational Linguistics* 26(3):339–373）
+  > "some utterances are **inherently ambiguous based on words alone** … the distinction between
+  > **BACKCHANNELS and AGREEMENTS** … which **share terms such as right and yeah**."；消歧靠上下文
+  > （"the following utterance is a YES-ANSWER or NO-ANSWER"）。
+- ⚠️ **两处使用警告**：**Bavelas et al. (2000) 别当"形式不足"的引文** —— 仅取得摘要，且其
+  generic/specific 之分**恰恰是按形式/内容耦合度划的**（"点头、mhm" vs "皱眉、惊呼"）；
+  **Jefferson 1984 / Drummond & Hopper 1993 只能经 Jurafsky 1998 转引**（原文付费墙）。
+
+**§8.2.0 小结**：经典线的结论与计算线（8.2.1）**同构** —— **形式不足以定类，须看序列位置与接受方的后续处置**。
+差别在时间：CA 传统 1982 年就把这句话说全了，工程界 2026 年才在 benchmark 上重新发现它
+（TurnBench "regardless of duration" / SID-Bench "intent"）。
+
+#### 8.2.1 支持「应更语义」的近期工作（9 篇，按论证力度排序）
+
+**① SID-Bench（ICME 2026，arXiv:2603.24144）—— 论证最外显的一篇** ★
+- 口径：*Semantic-Aware Interruption Detection in Spoken Dialogue Systems: Benchmark, Metric, and Model*（Xia, Mu, Shi, Xu, Xie；Qwen Team 实习工作）。
+- **明文意图式定义（§II-B 原句）**：
+  > "We define a true **Interruption** as an event where a speaker begins their turn with a **new communicative
+  > intent that semantically warrants** the other speaker to yield their turn. In contrast, a **Backchannel**
+  > is an utterance used to **acknowledge, agree, or show continued attention while not altering the
+  > conversational goal**."
+- **明文判声学不足（§V-C 原句）**：> "**relying solely on acoustic energy is an inadequate foundation**
+  for intelligent interruption handling."；VAD 基线被称 "**trigger-happy**"（FIR 平均 **0.840**，
+  对话场景 >0.90）；其自身 APT 0.711s vs 最好基线 2.129s。
+- ⚠️ **必须一起引用的三条限制**：**全文零 IAA**（无标注者信度统计，grep 验证）；标签由 **LLM 生成**
+  （Qwen-max/plus 插 `<break>` + Kaldi 强制对齐）；**被测模型与造标签模型同源**（Qwen 系），
+  且作者自承 "**correlating our automated metrics with human perceptual judgments**" 是 future work。
+- 判定：**支持**（但它是"用语义替代声学"的一次主张，不是已验证的结论）。
+
+**② TACT（IEEE SLT 2026，arXiv:2609.27372）—— 有对照数的最强同向证据**（详见 §4.2.1）
+> "TACT agrees with human judgments at **Spearman 0.81 versus 0.46 for binary metrics**."
+（且用同一语料 CANDOR；IAA：Krippendorff α=0.73。）
+
+**③ ECHO（arXiv:2609.17360）—— 实验设计本身就是论证**
+- *Same Words, Different Actions: Paired Turn-Taking Evaluation under Rewritten Dialogue Contexts*（Zhao, Cai 等）。
+- **同一段重叠转写、只换前文语境，正确动作相反**（一个应 Yield、一个应 Keep）：
+  > "Reliable full-duplex interaction therefore hinges on deciding **whether overlapping speech warrants a
+  > Yield or a Keep, not on detecting that speech occurred**."
+- 顺带命中本项目的"恒真判据"问题：> "a system with a **constant action preference scores well on any
+  interruption-only test**" —— 实测三个系统有 **Yield bias**（Easy Turn 99.09% / SoulX-Duplug 89.80% 判 Yield）。
+- 判定：**支持**（形式信息被完全控制后系统仍判错 ⇒ 决策信息在语境层）。
+
+**④ 自动标注流水线（arXiv:2610.03078）—— 本批最直白的一句** ★
+> "**Hence, backchannels cannot be identified using duration or a fixed lexical dictionary alone, as their
+> classification depends on conversation context.**"（§1；其 bc 定义为功能性：
+> "a listener contribution that provides feedback to the current speaker without attempting to take the floor"）
+- ⚠️ 代价同时暴露：其语境式判据的实测 **F1 = 0.621**（与人标对照见其 §3.4）。
+- 判定：**支持**（且是"形式不够"的直接证词）。
+
+**⑤ Semantic VAD（Tencent AI Lab，arXiv:2502.14145）—— 按意图二分 barge-in**
+- `Real INT`（用户意图改变话题 ⇒ 该停）vs `Fake INT`（非破坏性 ⇒ 该继续说，**例子含 back-channeling**）。
+- 原文批静音阈值："acoustic VAD ... can only predict `<|S-S|>` — **assuming the user has finished speaking**"。
+- 判定：**支持**。
+
+**⑥ GaMMA 标注协议（SIGDIAL 2025）—— 存在性证明：功能性标注可达 κ 0.75**
+> "Current computational methods, such as speech diarization, **VAD**, and ASR, **lack robustness in detecting
+> socially meaningful conversational structures like TCUs, backchannels, or failed floor transfers**"
+> "… **OpenAI's advanced voice mode interrupts on the user's backchannel speech**"
+- 其 backchannel 二元标注 **F1 = 0.832 / κ = 0.754**（但逐被试 0.645–0.865；定稿后为单人标注）。
+- 判定：**支持**（并给出"功能性定义也能标到 κ≈0.75"的存在性证明）。
+
+**⑦ Wang et al. 2024（ICASSP，arXiv:2401.14717）—— 声学最弱、语义最强的那个类**
+- 三分任务实测：Backchannel 类的 AUC —— HuBERT（声学）**0.6455** vs GPT2（文本）**0.7744**；
+  作者归因：> "'Turn-taking' and 'Continuing speech' are strongly cued by **intonation and duration**,
+  whereas '**Backchannel' is possibly more related to syntactic and semantic information**"。
+- ⚠️ 同一篇里"声明语义、操作化词表"（"the 20 most frequent one and two-word phrases"）——
+  它本身就是 §8.2.3「声明-操作化缺口」的样本。
+- 判定：**支持但带限定**（bc 受益于文本，但仍是最难类：0.79 < Turn 0.91）。
+
+**⑧ Duplex Cue（arXiv:2609.13117）—— 把"效果/uptake"提升为一等判据**（详见 §4.2.4）
+- ⚠️ 但自曝一处循环性：> "Cue intent **was not labeled blind** to Speaker A's subsequent response …
+  some portion of the 68.2% adaptation rate on Collaboration cues is **definitional rather than an
+  independent behavioral finding**" ⇒ **"语义/效果式"定义同样可能自证**。
+
+**⑨ JAL-Turn（arXiv:2603.26515）—— 双向证据**：其 bc 类失败归因支持语义
+（"the **intrinsically context-dependent nature of backchannels**"），但其框架同时反驳"语义即够"
+（"systems rely **solely on acoustic or semantic cues** → suboptimal"）。
+
+#### 8.2.2 削弱/反例线（3 篇，必须一起收录）
+
+**① NaturalTurn（Sci Rep 15:39155, 2025；Cooney & Reece —— 即 CANDOR 作者）★ 最强反例**
+- 用**纯形式**判据（cue list + ≤3 词 + 禁始词，同 Backbiter 三规则），且**明文把"不做语义"当优点**：
+  > "**By deliberately stopping there and eschewing prosodic features, gaze trackers, sequence models, etc.**,
+  > NaturalTurn remains **deterministic, transparent, and scalable**, able to segment millions of turns
+  > **without extra annotation, training data, or feature engineering**."
+- 它也批评过粗糙 VAD（"insert spurious boundaries at the listener's 'mhm'"）——**所以它不是"声学派"，
+  它是"形式 + 可扩展派"**。
+- 判定：**削弱**，但削弱的是"语义更对"，不是"声学更对"——它揭示的是**取舍**：可扩展性 vs 语义保真。
+
+**② VAP（Ekstedt & Skantze 2022，Interspeech）**：批评阈值式 turn-taking 之后，
+**以语音活动形状定义 bc**（"shorter, isolated VA from the other speaker, which roughly corresponds to
+the phenomenon called backchannels"），并**自监督建模** —— 高引工作证明形式定义可规模化落地。
+- 判定：**削弱**。
+
+**③ Less can be More（arXiv:2609.11066, 2026-09）—— 设计最干净的严格反例** ★
+- 同训练条件穷举 7 个模态子集：> "the **acoustic–prosodic combination achieves the best balance** …
+  **Adding text increases premature detections without improving performance** …
+  **turn-taking is primarily conveyed through intonation and silence patterns rather than semantic completeness**."
+  （text-only 平均每句 5 次误触发；所有含文本配置的 FA 都更高，McNemar p<10⁻⁹）
+- ⚠️ **转引必须注明的任务差异**：它是**单人 EOT**（判断"这个说话人说完没有"），
+  **不是双人重叠/bc 判定**；且限"in-domain two-speaker English telephony"；融合方式有自陈缺陷。
+- 判定：**削弱**（对本项目立场是**局部**反例：它反驳的是"EOT 需要语义"，不是"bc/重叠判定需要语义"）。
+
+#### 8.2.3 一个比「大家都用声学」更精确、也更难反驳的表述 ★
+
+把 8.2.1 与 8.2.2 并排后，浮现出一个**两条线都同意的结构性事实**：
+
+> **多数工作的「声明定义」早已是功能性/语义的，形式性恰恰落在「操作化」层 —— 二者之间的缺口才是问题所在。**
+
+- 声明语义、操作化形式的样本（本汇编内就有 4 个）：Wang 2024（"without signaling an intent to take a
+  turn" → 20 个高频短语）；Easy Turn（"should not interrupt the system's speech output" → `<2s` 筛选）；
+  FDB v1.5（"should not interrupt an ongoing response" → 99 条合成词表）；HumDial（同上，无操作化）；
+  **本项目 L2**（行为语义 → overlap 100–500ms）。
+- 这个表述的优势：**14 篇里没有任何一篇能反证它**；且 NaturalTurn 那类"有意为之"的立场
+  反而**证明该缺口是自觉的取舍**（可扩展性/确定性），而不是疏漏 —— 这正是本项目可以正当地去
+  填的位置：**不是"你们不懂语义"，而是"这个取舍的代价从未被量化过，我们来量化"**。
+- ⚠️ 附一处**命名撞车**（引用时必查）：*Less can be More* 的 **APT = Acoustic–Prosodic–Text**（架构名），
+  与 SID-Bench 的 **APT = Average Penalty Time**（度量名）**完全同形异物**。
+
+### 8.3 Claude 的评估
+
+> 以下为【评估】级内容（非文献引用、非实验结论），按项目惯例与证据分开列。
+
+#### (1) 结论先说：方向支持，但建议改一处表述、加一处区分
+
+**改一处表述**：不写"文献都用形式定义、所以定义应更语义"，改写成
+**「声明定义早已语义化，形式性落在操作化层；这个缺口的代价从未被量化」**（§8.2.3）。
+理由：① 更准确（8.2.1 里 Wang 2024 / Easy Turn / FDB v1.5 / HumDial 全是"声明语义、落地形式"）；
+② **抗反驳** —— NaturalTurn（CANDOR 作者自己）与 *Less can be More* 从反例变成论据：
+它们证明这个缺口是**自觉的取舍**（可扩展性 / 声学已够用），而取舍的代价没人量过；
+③ 不与 TACT 撞车（TACT 在"意图条件化评估"上已占位；我们的位置是"**缺口 + 可靠性审计**"）。
+
+**加一处区分**（我认为这是目前讨论里所有人都在混的一层）——**【评估】定义层与检测层是两个问题**：
+
+| | 问题 | 本项目证据 | 文献证据 |
+|---|---|---|---|
+| **定义层** | "什么算 bc / interruption" | **支持语义/功能**：F3 的 NONOVER 13%（无重叠的 bc 存在）、INTENT（意图≠效果）、同一个 yeah 两种功能；ARI 人标 0.058（声学五特征恢复不出人类标签） | 支持：CA 传统 + §8.2.1 九篇 |
+| **检测层** | "怎么自动识别出它" | L3 软分数对齐最好（window AUROC 0.667），但硬阈值下优势消失 | **混合**：bc 靠语义（Wang 2024: 0.65→0.77）、EOT 靠声学（*Less can be More*） |
+
+⇒ **项目的立场应明确落在「定义层」**：不是"模型该多用语义特征"（那会被 *Less can be More* 直接顶回来，
+而且它反驳的正是检测层），而是"**行为类别本身不该由形式特征来定义**"。
+工程文献偏爱形式判据，很大程度上是把**检测的便利**误当成了**定义的依据** —— 形式特征好算、好复现、
+好自动化（NaturalTurn 的辩护成立），但"好算"不是"对"。**这个混淆正是本项目审计的对象。**
+
+#### (2) 支持你方向的证据（你的实验 + 文献，分别对应）
+
+- 你说"根据我的实验"—— 对应关系是：**F3 的 47 条描述**证明现有形式边界**装不下**真实行为
+  （这是定义层证据，最硬）；**ARI 0.058** 证明人类标签**不在**那五个声学特征里（这是定量证据）；
+  **L3 软分数最好**证明"模型标注器比 VAD 规则更接近真实重叠"（这是检测层证据，但方向一致）。
+- 文献里最该引的三条：**TACT**（0.81 vs 0.46，同一语料 CANDOR）、**SID-Bench**（"relying solely on
+  acoustic energy is an inadequate foundation"）、**2610.03078**（"cannot be identified using duration
+  or a fixed lexical dictionary alone"）。
+
+#### (3) 必须一起带上的风险（否则会被审稿人打回）
+
+1. **运行时可得性（最硬的技术约束）**：`effect/uptake` 类语义（"对方是否被抢走话轮"）**只在未来可知**
+   （TurnBench 明文 "dependent on future information revealed seconds later"）。
+   ⇒ 语义式定义**必须分 intent / effect 两栏**；流式训练目标只能挂 **intent**（onset 时可见），
+   effect 归评估侧。此推导已写在 `2026-10-03` 文档 §6.2，本汇编与其一致。
+2. **可靠性不是自动的**：DuplexGen（三选一）κ=0.05 vs TACT（带上下文+参考续说+合格窗口）α=0.73 ——
+   差距来自**引出形式**，不是"语义 vs 形式"。⇒ 走语义路线必须**同时**升级引出形式，否则重蹈 DuplexGen。
+3. **同源与循环风险**：SID-Bench 用 LLM 标签、且被测模型与造标签模型同族；Duplex Cue 自曝 intent 标注
+   **没做盲**（看到对方回应后标）⇒ "效果式"定义容易自证。**本项目 F3 的独特性**恰好在这：
+   描述是**人写的、且写在分类之前**（09-27 文档 §6 的设计原则）—— 这是可辩护的，要守住。
+4. **代价与定位**：NaturalTurn 的辩护（百万级、零标注、确定性）在**生产管线**里是对的。
+   ⇒ 语义式定义的正确定位是**评估与审计**（小规模、高保真），不是替代生产判据——
+   这与论文 no-shortcut protocol 的定位天然一致。
+5. **局部反例要如实承认**：*Less can be More* 证明**单人 EOT** 任务上语义不加分。
+   ⇒ 我们的主张必须限定在"**双人重叠中的行为归类（bc vs int）**"，不能扩大到所有 turn-taking 子任务。
+
+#### (4) 可操作建议（按性价比）
+
+1. **论文表述**按 (1) 改写（半天工作量，收益最大）。
+2. **把"缺口"变成可测命题**：挑 3–4 个"声明语义、操作化形式"的系统（Wang 2024 / Easy Turn /
+   FDB v1.5 / 本项目 L2），在同一批事件上比较"它们的操作化判据"与"语义判据"给出的排序差异 ——
+   本项目 E1/E2 的审计方法可直接搬，**零新标注**。
+3. **语义侧可靠性**按 TACT 式设计（上下文 + 参考 + 窗口），并守住"**描述先于分类**"（F3 的教训）；
+   每轴单独算 κ（补 09-27 §5.2 的洞）。
+4. **可证伪点（建议预登记）**：① 若在改进形式下 intent 标注可靠性仍低于形式判据的重复性 ⇒ 支点消失；
+   ② 若 intent-conditioned 与形式式评估在**系统排序**上 Spearman > 0.9（即"缺口没有代价"）⇒ 论点不成立；
+   ③ 反面参照：TACT 的 0.81 vs 0.46 是我们期望看到的那种分离度。
+
+#### (5) 一句话总结
+
+**你的直觉经得起文献检验，但"大家用声学"要改写成"大家的声明早已语义、操作化仍是形式代理"；
+真正的贡献点不是"语义更好"（有人已经在做了），而是"这个缺口的代价可以被量化，且我们已经在量"**
+—— F3 的 47 条描述 + ARI 0.058 + 本节的缺口清单，就是这条论点的三根桩。
+
 ## 更新日志
 
 - 2026-10-08 建档；§1.1 FD-Bench（本人抓取）；§1.2–1.7 FDB 家族 + DuplexAct + HiPLEX（agent 抓取 HTML 全文，关键句本地回核）；
@@ -1202,3 +1481,8 @@ HumDial 的 user backchannel（只有一句语义）、CANDOR 的 interruption�
   §4.1（四条判据路线 + TurnBench + Paierl 撤回）、§4.2（2026 新动向 5 篇）、§5（本项目口径）、§6（横向对照）。
   **共 7 条对项目已有记录的更正**：① Paierl 引用撤回；② CANDOR 论文无时长阈值；③ Behavior-SD 论文无 0.5s/0.1s 阈值；
   ④ TACT 报 α 非 κ；⑤ WildTurn 是数据集不是论文名；⑥ WildTurn 无人工标注无 IAA；⑦ X2-Turn 论文 5 类 vs 接口 6 类。
+  7 条更正已同步写回源文档（§7 D 已核销），并随首次提交入库。
+- 2026-10-08（同日续二）：新增 **§8 专题「定义该更语义吗」** —— §8.1 前提校准（24 体系按判据路线归类）；
+  §8.2 文献支持度（经典线 9 查 5 中 + 计算线 14 篇，含最强反例 NaturalTurn 与 *Less can be More*，
+  及 §8.2.3 的表述修正：**「声明已语义、操作化仍是形式代理，缺口代价未量化」**）；
+  §8.3 评估（定义层/检测层区分 + 5 条风险 + 3 条可证伪点）。
