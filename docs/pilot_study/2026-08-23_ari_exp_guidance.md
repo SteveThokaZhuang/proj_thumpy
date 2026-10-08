@@ -89,7 +89,7 @@ pip install soundfile  # 读取 NIST 格式音频（如果需要）
 |------|----------|----------|----------|
 | **能量比** | `RMS_overlap / RMS_host` | BC 能量通常低于宿主 | [Levitan et al., 2011](https://aclanthology.org/P11-2020.pdf) |
 | **F0 相关性** | `Pearson_r(F0_overlap, F0_host)` | BC 常伴随音高随动 | [Ward, 2019](https://www.cs.utep.edu/nigel/bc/) |
-| **时长** | `overlap_end - overlap_start` (秒) | BC 时长多集中在 0.2-0.5s | [Paierl et al., 2024](https://mdpi.com/2226-471X/10/8/194) |
+| **时长** | `overlap_end - overlap_start` (秒) | ~~BC 时长多集中在 0.2-0.5s~~ 🔴 **2026-10-08 撤回**：Paierl 原文（**2025**，非 2024）**未测 BC 自身时长**，其分布是 time_gap（前句结束→BC 起点）；本行**不再有文献支撑**，详见 `docs/related_works/fd_activities.md` §4.1④ | [Paierl et al., 2025](https://mdpi.com/2226-471X/10/8/194) |
 | **频谱质心** | `librosa.feature.spectral_centroid` | BC 频谱通常更集中 | [Ruede et al., 2017](https://arxiv.org/pdf/1706.01340v1.pdf) |
 
 ### 3.2 特征提取代码
@@ -612,7 +612,7 @@ python scripts/visualize_ari.py \
 
 1. **Levitan et al., 2011**. "Entrainment in Speech Preceding Backchannels" [ACL](https://aclanthology.org/P11-2020.pdf)
 2. **Ward, 2019**. "Backchannel Facts" [UTEP](https://www.cs.utep.edu/nigel/bc/)
-3. **Paierl et al., 2024**. "Distribution and Timing of Verbal Backchannels" [MDPI](https://mdpi.com/2226-471X/10/8/194)
+3. **Paierl et al., 2025**（~~2024~~）. "Distribution and Timing of Verbal Backchannels"（*Languages* 10(8):194）[MDPI](https://mdpi.com/2226-471X/10/8/194) —— ⚠️ **2026-10-08 核实：未测 BC 时长，§3.1「0.2–0.5s」引用撤回**（`docs/related_works/fd_activities.md` §4.1④）
 4. **Ruede et al., 2017**. "Yeah, Right, Uh-Huh: A Deep Learning Backchannel Predictor" [arXiv](https://arxiv.org/pdf/1706.01340v1.pdf)
 5. **Full-Duplex-Bench, 2025**. "A Benchmark to Evaluate Full-duplex Spoken Dialogue Models" [arXiv](https://arxiv.org/html/2503.04721v3/)
 

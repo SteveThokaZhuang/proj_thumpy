@@ -341,6 +341,10 @@ touch e4_real_data_annotation.py
 | **FD-Bench 代码不开源** | 无法复现评判逻辑 | 在论文中声明"复现典型 L2 规则"，引用 Silero VAD+ 阈值规则文献 |
 | **ASR WER 过高** | CANDOR 64kbps 导致 ASR 崩溃 | 增加"Oracle ASR"对照（用 GT 文本），分离 ASR 误差与状态预测误差 |
 
+> 🔴 **2026-10-08 更正（不改上表原文，保持建议记录原样）**：上表「**FD-Bench 代码不开源**」**不成立** ——
+> 本地 `third_party/FD-Bench/` 有完整 `benchmarking.py`（E2 审计正是复刻它跑的）。该触发条件的前提已消失；
+> 「复现典型 L2 规则」的应对方案本身仍有效。出处：`docs/related_works/fd_activities.md` §7 D。
+
 ---
 
 ## 🎯 最终交付物
